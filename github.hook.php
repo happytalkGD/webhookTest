@@ -287,9 +287,16 @@ function analyzePushWithClaude($payload) {
         $command .= $prompt . "\n";
         $command .= "QUERY_PROMPT";
         
+        // Log the command being executed
+        error_log("Executing Claude command: " . $command);
+        
         $output = [];
         $returnCode = 0;
         exec($command . " 2>&1", $output, $returnCode);
+        
+        // Log the return code and output status
+        error_log("Claude command return code: " . $returnCode);
+        error_log("Claude output lines: " . count($output));
         
         if ($returnCode === 0 && !empty($output)) {
             $analysisResult = implode("\n", $output);
