@@ -164,7 +164,7 @@ switch ($event) {
         break;
         
     case 'pull_request':
-        // Handle pull request event
+        // Handle pull request event  
         $response['message'] = 'Pull request event received';
         if (isset($payload['action'])) {
             $response['action'] = $payload['action'];
