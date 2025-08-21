@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  # web (laravel)
+  web:
+    build:
+      context: .
+      dockerfile: ./web/Dockerfile
+    volumes:
+      - "../:/var/www/html:rw"
+      - "./web/php.ini:/usr/local/etc/php/php.ini"
+      - "./web/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini:rw,cached"
+      - "./web/sites-enabled:/etc/apache2/sites-enabled"
+    environment:
+      - "TZ=Asia/Seoul"
+      - "APACHE_DOCUMENT_ROOT=/var/www/html"
+      - "API_AUTH_TOKEN=9f370016587aef101d387a0a932260de8185a6deb76f49c3f721bc0885285369"
+    ports:
+      - "8807:80"
