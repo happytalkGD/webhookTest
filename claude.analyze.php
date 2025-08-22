@@ -260,6 +260,60 @@ if (php_sapi_name() === 'cli') {
     echo "=== Claude Summaries Processor ===\n";
     echo "Starting at: " . date('Y-m-d H:i:s') . "\n\n";
     
+    // Lock file to prevent duplicate runs
+    $lockFile = dirname(__FILE__) . '/locks/claude_analyze.lock';
+    $lockDir = dirname($lockFile);
+    
+    // Create lock directory if it doesn't exist
+    if (!is_dir($lockDir)) {
+        mkdir($lockDir, 0777, true);
+    }
+    
+    // Check if lock file exists and if it's stale
+    if (file_exists($lockFile)) {
+        $lockAge = time() - filemtime($lockFile);
+        // If lock is older than 5 minutes, consider it stale
+        if ($lockAge < 300) {
+            echo "⚠️  Another instance is already running (lock age: {$lockAge} seconds)\n";
+            echo "Lock file: {$lockFile}\n";
+            echo "If you're sure no other instance is running, delete the lock file and try again.\n";
+            exit(0);
+        } else {
+            echo "⚠️  Stale lock file found (age: {$lockAge} seconds), removing it...\n";
+            unlink($lockFile);
+        }
+    }
+    
+    // Create lock file
+    if (!touch($lockFile)) {
+        echo "❌ Failed to create lock file\n";
+        exit(1);
+    }
+    
+    // Register shutdown function to remove lock file
+    register_shutdown_function(function() use ($lockFile) {
+        if (file_exists($lockFile)) {
+            unlink($lockFile);
+            echo "Lock file removed.\n";
+        }
+    });
+    
+    // Also handle signals for clean shutdown
+    if (function_exists('pcntl_signal')) {
+        pcntl_signal(SIGINT, function() use ($lockFile) {
+            if (file_exists($lockFile)) {
+                unlink($lockFile);
+            }
+            exit(0);
+        });
+        pcntl_signal(SIGTERM, function() use ($lockFile) {
+            if (file_exists($lockFile)) {
+                unlink($lockFile);
+            }
+            exit(0);
+        });
+    }
+    
     processWebhookFiles();
     
     echo "\nFinished at: " . date('Y-m-d H:i:s') . "\n";
