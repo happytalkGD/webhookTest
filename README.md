@@ -1,0 +1,239 @@
+# GitHub Webhook Automation System
+
+GitHub 푸시 이벤트를 자동으로 분석하고 Jira 티켓에 댓글을 추가하는 자동화 시스템입니다.
+
+## 시스템 구성
+
+```
+GitHub Push → github.hook.php → claude.analyze.php → jira.hook.php → Jira Issue
+```
+
+1. **github.hook.php**: GitHub 웹훅을 받아서 `pending_webhooks/`에 저장
+2. **claude.analyze.php**: 웹훅 데이터를 Claude AI로 분석해서 `pending_analysis/`에 마크다운 파일 저장  
+3. **jira.hook.php**: 분석 파일을 읽어서 Jira 티켓에 댓글/설명 추가
+
+## 디렉토리 구조
+
+```
+webhookTest/
+├── github.hook.php          # GitHub 웹훅 핸들러
+├── claude.analyze.php       # Claude AI 분석 스크립트
+├── jira.hook.php           # Jira 통합 스크립트 (PHP)
+├── jira_integration.sh     # Jira 통합 스크립트 (Shell)
+├── .env                    # 환경 설정 파일
+├── pending_webhooks/       # 처리 대기 중인 웹훅 데이터
+├── pending_analysis/       # 처리 대기 중인 분석 파일
+├── processed_webhooks/     # 처리 완료된 웹훅 데이터
+├── processed_jira/         # 처리 완료된 분석 파일
+└── logs/                   # 로그 파일들
+```
+
+## 환경 설정
+
+### 1. .env 파일 생성
+
+```bash
+# Jira 설정
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@example.com
+JIRA_API_TOKEN=your-api-token
+```
+
+### 2. 권한 설정
+
+```bash
+chmod 755 *.php
+chmod 755 *.sh
+chmod 777 pending_* processed_* logs/
+```
+
+### 3. PHP 확장 모듈 확인
+
+```bash
+# curl 확장이 필요합니다
+php -m | grep curl
+
+# 설치가 필요한 경우:
+# Ubuntu/Debian: sudo apt-get install php-curl
+# CentOS/RHEL: sudo yum install php-curl
+```
+
+## Crontab 자동화 설정
+
+### 권장 설정 (매분 실행)
+
+```bash
+# crontab 편집
+crontab -e
+
+# 다음 내용 추가:
+# GitHub 웹훅 분석 (매분 실행)
+* * * * * cd /home/gd/webhookTest && php claude.analyze.php >> logs/cron_analyze.log 2>&1
+
+# Jira 통합 (매분 실행) - PHP 버전
+* * * * * cd /home/gd/webhookTest && php jira.hook.php >> logs/cron_jira.log 2>&1
+
+# 또는 Shell 스크립트 버전 사용
+# * * * * * cd /home/gd/webhookTest && ./jira_integration.sh >> logs/cron_jira.log 2>&1
+```
+
+### 대안 설정 (5분마다 실행)
+
+더 안정적인 운영을 위해 5분마다 실행하는 경우:
+
+```bash
+# 5분마다 실행
+*/5 * * * * cd /home/gd/webhookTest && php claude.analyze.php >> logs/cron_analyze.log 2>&1
+*/5 * * * * cd /home/gd/webhookTest && php jira.hook.php >> logs/cron_jira.log 2>&1
+```
+
+### 단계별 실행 (권장)
+
+분석과 Jira 업로드를 시간차를 두고 실행:
+
+```bash
+# 분석: 매분 실행
+* * * * * cd /home/gd/webhookTest && php claude.analyze.php >> logs/cron_analyze.log 2>&1
+
+# Jira 통합: 2분마다 실행 (분석 완료 후)
+*/2 * * * * cd /home/gd/webhookTest && php jira.hook.php >> logs/cron_jira.log 2>&1
+```
+
+## GitHub 웹훅 설정
+
+### 1. GitHub 리포지토리 설정
+
+1. 리포지토리 → Settings → Webhooks → Add webhook
+2. Payload URL: `https://your-domain.com/path/to/github.hook.php`
+3. Content type: `application/json`
+4. Secret: `test123` (또는 github.hook.php에서 변경)
+5. Events: `Just the push event` 선택
+
+### 2. 웹훅 검증
+
+```bash
+# 웹훅 로그 확인
+tail -f logs/webhook_$(date +%Y-%m-%d).log
+
+# 요약 로그 확인
+tail -f logs/summary.log
+```
+
+## 수동 실행 및 테스트
+
+### 개별 스크립트 실행
+
+```bash
+# 웹훅 분석 실행
+php claude.analyze.php
+
+# Jira 통합 실행 (PHP)
+php jira.hook.php
+
+# Jira 통합 실행 (Shell)
+./jira_integration.sh
+```
+
+### 로그 확인
+
+```bash
+# 분석 로그
+tail -f logs/analysis_errors.log
+
+# Jira 로그
+tail -f logs/jira_hook_errors.log
+tail -f logs/jira_success.log
+
+# Cron 로그
+tail -f logs/cron_analyze.log
+tail -f logs/cron_jira.log
+```
+
+## 지원되는 Jira 티켓 패턴
+
+- `[P03-45]` - 대괄호 포함 형식
+- `[PROJ-123]` - 표준 Jira 형식
+- `P03-45` - 대괄호 없는 형식
+- `PROJ-123` - 표준 형식
+
+티켓 ID는 다음 순서로 검색됩니다:
+1. 커밋 메시지
+2. 브랜치 이름
+
+## Markdown 지원 형식
+
+### 헤더 변환
+- `# Header` → `h1. Header`
+- `## Header` → `h2. Header`
+- `### Header` → `h3. Header`
+- `#### Header` → `h4. Header`
+- `##### Header` → `h5. Header` (새로 추가)
+
+### 기타 형식
+- `**bold**` → `*bold*`
+- `` `code` `` → `{{code}}`
+- `- list` → `* list`
+- `[link](url)` → `[link|url]`
+
+## 문제 해결
+
+### 일반적인 문제
+
+1. **웹훅이 받아지지 않는 경우**
+   ```bash
+   # 웹 서버 로그 확인
+   tail -f /var/log/apache2/error.log
+   # 또는
+   tail -f /var/log/nginx/error.log
+   ```
+
+2. **분석이 실행되지 않는 경우**
+   ```bash
+   # Claude CLI 설치 확인
+   which claude
+   
+   # 권한 확인
+   ls -la pending_webhooks/
+   ```
+
+3. **Jira 연결 실패**
+   ```bash
+   # .env 파일 확인
+   cat .env
+   
+   # 네트워크 연결 테스트
+   curl -u "email:token" https://your-domain.atlassian.net/rest/api/2/myself
+   ```
+
+### 디버깅 모드
+
+```bash
+# PHP 에러 표시 활성화 (개발 시에만)
+sed -i 's/ini_set('\''display_errors'\'', 0)/ini_set('\''display_errors'\'', 1)/' *.php
+```
+
+## 보안 고려사항
+
+1. **.env 파일 권한**: `chmod 600 .env`
+2. **웹훅 시크릿**: GitHub에서 설정한 시크릿과 github.hook.php의 시크릿 일치 확인
+3. **Jira API 토큰**: 최소 권한 원칙 적용
+4. **로그 파일**: 민감한 정보 로깅 방지
+
+## 모니터링
+
+### 상태 확인 스크립트
+
+```bash
+#!/bin/bash
+# status_check.sh
+
+echo "=== Webhook Automation Status ==="
+echo "Pending webhooks: $(ls -1 pending_webhooks/*.json 2>/dev/null | wc -l)"
+echo "Pending analysis: $(ls -1 pending_analysis/*.md 2>/dev/null | wc -l)"
+echo "Recent webhook: $(ls -1t logs/webhook_*.log 2>/dev/null | head -1 | xargs tail -1)"
+echo "Last cron run:"
+echo "  Analysis: $(tail -1 logs/cron_analyze.log 2>/dev/null)"
+echo "  Jira: $(tail -1 logs/cron_jira.log 2>/dev/null)"
+```
+
+사용법: `chmod +x status_check.sh && ./status_check.sh`
