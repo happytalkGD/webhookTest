@@ -261,19 +261,14 @@ function markdownToJira($text) {
  */
 function createJiraComment($analysisData) {
     // Build comment in Markdown first
-    $markdown = "# 🔄 깃헙 Push 분석 리포트\n\n";
+    $markdown = "# 깃헙 Push 분석 리포트\n\n";
     
-    $markdown .= "**Repository:** {$analysisData['repository']}\n";
-    $markdown .= "**Branch:** {$analysisData['branch']}\n";
-    $markdown .= "**Pusher:** {$analysisData['pusher']}\n";
-    $markdown .= "**Commits:** {$analysisData['commits']}\n";
-    $markdown .= "**Generated:** {$analysisData['generated']}\n\n";
+    $markdown .= "** {$analysisData['repository']} / {$analysisData['branch']} / {$analysisData['pusher']} / ({$analysisData['generated']})\n\n";
     
     $markdown .= "---\n\n";
     
     // Use full analysis if available
     if (isset($analysisData['full_analysis']) && !empty($analysisData['full_analysis'])) {
-        $markdown .= "## 📊 Claude AI Analysis\n\n";
         $markdown .= $analysisData['full_analysis'] . "\n\n";
     } else {
         // Fallback to individual sections
