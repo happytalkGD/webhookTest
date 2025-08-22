@@ -11,8 +11,8 @@ ini_set('log_errors', 1);
 ini_set('error_log', dirname(__FILE__) . '/logs/analysis_errors.log');
 
 // Configuration
-$webhookDataDir = dirname(__FILE__) . '/webhook_data';
-$analysisDir = dirname(__FILE__) . '/analysis';
+$webhookDataDir = dirname(__FILE__) . '/pending_webhooks';
+$analysisDir = dirname(__FILE__) . '/pending_analysis';
 $processedDir = dirname(__FILE__) . '/processed_webhooks';
 
 // Create necessary directories

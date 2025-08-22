@@ -5,8 +5,8 @@
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WEBHOOK_DATA_DIR="$SCRIPT_DIR/webhook_data"
-ANALYSIS_DIR="$SCRIPT_DIR/analysis"
+WEBHOOK_DATA_DIR="$SCRIPT_DIR/pending_webhooks"
+ANALYSIS_DIR="$SCRIPT_DIR/pending_analysis"
 PROCESSED_DIR="$SCRIPT_DIR/processed_webhooks"
 LOGS_DIR="$SCRIPT_DIR/logs"
 

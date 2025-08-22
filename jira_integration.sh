@@ -17,7 +17,7 @@ JIRA_EMAIL="${JIRA_EMAIL:-your-email@example.com}"
 JIRA_API_TOKEN="${JIRA_API_TOKEN:-your-api-token}"
 
 # Directories
-ANALYSIS_DIR="$SCRIPT_DIR/analysis"
+ANALYSIS_DIR="$SCRIPT_DIR/pending_analysis"
 PROCESSED_JIRA_DIR="$SCRIPT_DIR/processed_jira"
 LOGS_DIR="$SCRIPT_DIR/logs"
 

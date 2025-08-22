@@ -1,7 +1,8 @@
 .idea/
 .env
-logs
-source
+logs/
+source/
+pending_webhooks/
+pending_analysis/
 processed_webhooks/
-analysis/
 processed_jira/

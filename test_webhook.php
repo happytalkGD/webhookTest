@@ -83,11 +83,11 @@ echo "Time: " . date('Y-m-d H:i:s') . "\n\n";
 echo "Testing webhook data saving...\n\n";
     
     // Simulate the saving logic from github.hook.php
-    $webhookDataDir = dirname(__FILE__) . '/webhook_data';
+    $webhookDataDir = dirname(__FILE__) . '/pending_webhooks';
     
     // Check/create directory
     if (!is_dir($webhookDataDir)) {
-        echo "Creating webhook_data directory: $webhookDataDir\n";
+        echo "Creating pending_webhooks directory: $webhookDataDir\n";
         if (!mkdir($webhookDataDir, 0777, true)) {
             echo "ERROR: Failed to create directory\n";
             exit(1);
@@ -146,7 +146,7 @@ echo "Testing webhook data saving...\n\n";
         
         // Also test Docker container if needed
         echo "Checking Docker container (if applicable):\n";
-        $dockerCheck = shell_exec("docker exec docker-web-1 ls -la /var/www/html/webhook_data/ 2>&1 || echo 'Docker not available'");
+        $dockerCheck = shell_exec("docker exec docker-web-1 ls -la /var/www/html/pending_webhooks/ 2>&1 || echo 'Docker not available'");
         echo $dockerCheck . "\n";
         
     } else {
@@ -160,7 +160,7 @@ echo "\n=== Test Complete ===\n";
 
 // Provide next steps
 echo "\nNext steps:\n";
-echo "1. Check the webhook_data directory for the saved file\n";
+echo "1. Check the pending_webhooks directory for the saved file\n";
 echo "2. Run 'php test_analyze.php' to test Claude analysis\n";
 echo "3. Or run 'php claude.analyze.php' directly\n";
 

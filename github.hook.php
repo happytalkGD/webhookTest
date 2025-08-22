@@ -138,15 +138,15 @@ switch ($event) {
             $response['commits_count'] = count($payload['commits']);
             
             // Save webhook data for later analysis
-            $webhookDataDir = dirname(__FILE__) . '/webhook_data';
+            $webhookDataDir = dirname(__FILE__) . '/pending_webhooks';
             
             // Debug: Check directory creation
             if (!is_dir($webhookDataDir)) {
-                error_log("Creating webhook_data directory: " . $webhookDataDir);
+                error_log("Creating pending_webhooks directory: " . $webhookDataDir);
                 if (!mkdir($webhookDataDir, 0777, true)) {
                     error_log("ERROR: Failed to create directory: " . $webhookDataDir);
                     $response['data_saved'] = false;
-                    $response['error'] = 'Failed to create webhook_data directory';
+                    $response['error'] = 'Failed to create pending_webhooks directory';
                     break;
                 }
                 chmod($webhookDataDir, 0777);

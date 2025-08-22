@@ -46,7 +46,7 @@ define('JIRA_EMAIL', getenv('JIRA_EMAIL') ?: 'your-email@example.com');
 define('JIRA_API_TOKEN', getenv('JIRA_API_TOKEN') ?: 'your-api-token');
 
 // Directories
-$analysisDir = dirname(__FILE__) . '/analysis';
+$analysisDir = dirname(__FILE__) . '/pending_analysis';
 $processedJiraDir = dirname(__FILE__) . '/processed_jira';
 $logsDir = dirname(__FILE__) . '/logs';
 
@@ -261,7 +261,7 @@ function markdownToJira($text) {
  */
 function createJiraComment($analysisData) {
     // Build comment in Markdown first
-    $markdown = "# 🔄 GitHub Push Analysis Report\n\n";
+    $markdown = "# 🔄 깃헙 Push 분석 리포트\n\n";
     
     $markdown .= "**Repository:** {$analysisData['repository']}\n";
     $markdown .= "**Branch:** {$analysisData['branch']}\n";

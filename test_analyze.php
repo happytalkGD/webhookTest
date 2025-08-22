@@ -14,16 +14,16 @@ if (!file_exists($analyzeScript)) {
     exit(1);
 }
 
-// Check webhook_data directory
-$webhookDataDir = dirname(__FILE__) . '/webhook_data';
+// Check pending_webhooks directory
+$webhookDataDir = dirname(__FILE__) . '/pending_webhooks';
 if (!is_dir($webhookDataDir)) {
-    echo "ERROR: webhook_data directory not found\n";
+    echo "ERROR: pending_webhooks directory not found\n";
     echo "Run test_webhook.php first to create test data\n";
     exit(1);
 }
 
 // List available files to process
-echo "Checking webhook_data directory...\n";
+echo "Checking pending_webhooks directory...\n";
 $files = glob($webhookDataDir . '/*.json');
 
 if (empty($files)) {
