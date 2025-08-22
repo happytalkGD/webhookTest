@@ -1,6 +1,6 @@
 <?php
 /**
- * Test Jira format conversion
+ * Test complex markdown conversion
  */
 
 function markdownToJira($text) {
@@ -54,43 +54,13 @@ function markdownToJira($text) {
     return $text;
 }
 
-$testMarkdown = "# 🔄 GitHub Push Analysis Report
+$testMarkdown = "### 🔍 **코드 리뷰 포인트**
 
-**Repository:** happytalkGD/webhookTest
-**Branch:** master
-**Commits:** 3
+#### 1. **PHP curl 확장 체크 (jira.hook.php:7-15)**
+설명 내용입니다.
 
----
-
-## 📊 Claude AI Analysis
-
-📌 **주요 변경사항**: Jira 통합 기능을 추가하고 웹훅 분석 스크립트를 개선했습니다.
-
-📁 **영향받는 모듈**:
-- `jira.hook.php` (신규 추가)
-- `analyze.sh` (수정)
-- `.gitignore` (수정)
-
-🎯 **변경 목적**: GitHub 변경사항을 자동으로 Jira에 기록
-
-🔍 **코드 리뷰 포인트**:
-1. API 토큰 보안 확인
-2. 에러 처리 로직 검증
-
-
-
-3.
-
-
-a.
-i.
-1.
-
-위와 같은 빈 리스트 항목들이 있습니다.
-
----
-
-_This comment was automatically generated_";
+#### 2. **Markdown 변환 개선 (test_jira_format.php:28-34)**
+또 다른 설명입니다.";
 
 echo "=== Original Markdown ===\n";
 echo $testMarkdown . "\n\n";

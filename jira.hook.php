@@ -160,10 +160,13 @@ function parseAnalysisFile($filepath) {
  * Convert Markdown to Jira markup
  */
 function markdownToJira($text) {
-    // Headers
-    $text = preg_replace('/^### (.+)$/m', 'h3. $1', $text);
-    $text = preg_replace('/^## (.+)$/m', 'h2. $1', $text);
-    $text = preg_replace('/^# (.+)$/m', 'h1. $1', $text);
+    // Headers - Process 4-level headers first, treating numbered h4 as bold items
+    // Convert #### 1. **text** to *1. text* (bold numbered item)
+    $text = preg_replace('/^####\s+(\d+\.)\s+\*\*(.+?)\*\*$/m', '*$1 $2*', $text);
+    $text = preg_replace('/^####\s+(.+)$/m', 'h4. $1', $text);
+    $text = preg_replace('/^###\s+(.+)$/m', 'h3. $1', $text);
+    $text = preg_replace('/^##\s+(.+)$/m', 'h2. $1', $text);
+    $text = preg_replace('/^#\s+(.+)$/m', 'h1. $1', $text);
     
     // Bold - **text** or __text__ to *text*
     $text = preg_replace('/\*\*(.+?)\*\*/', '*$1*', $text);
@@ -192,13 +195,13 @@ function markdownToJira($text) {
     // Regular lists - * or - to *
     $text = preg_replace('/^[\*\-]\s+(.+)$/m', '* $1', $text);
     
-    // Numbered lists - only convert actual numbered lists with content
-    $text = preg_replace('/^\d+\.\s+([^\s].+)$/m', '# $1', $text);
+    // Remove standalone list markers FIRST before converting numbered lists
+    $text = preg_replace('/^\d+\.\s*$/m', '', $text);  // Remove "1." etc on its own
+    $text = preg_replace('/^[a-z]\.\s*$/m', '', $text);  // Remove "a." etc on its own
+    $text = preg_replace('/^[ivx]+\.\s*$/m', '', $text);  // Remove "i.", "ii.", etc on its own
     
-    // Remove standalone numbers/letters that are not part of lists
-    $text = preg_replace('/^[0-9]+\.\s*$/m', '', $text);  // Remove "1." on its own line
-    $text = preg_replace('/^[a-z]\.\s*$/m', '', $text);   // Remove "a." on its own line
-    $text = preg_replace('/^[i]+\.\s*$/m', '', $text);    // Remove "i." on its own line
+    // Now convert numbered lists - only with content
+    $text = preg_replace('/^\d+\.\s+([^\s].+)$/m', '# $1', $text);
     
     // Links - [text](url) to [text|url]
     $text = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '[$1|$2]', $text);
