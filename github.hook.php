@@ -139,26 +139,63 @@ switch ($event) {
             
             // Save webhook data for later analysis
             $webhookDataDir = dirname(__FILE__) . '/webhook_data';
+            
+            // Debug: Check directory creation
             if (!is_dir($webhookDataDir)) {
-                mkdir($webhookDataDir, 0777, true);
+                error_log("Creating webhook_data directory: " . $webhookDataDir);
+                if (!mkdir($webhookDataDir, 0777, true)) {
+                    error_log("ERROR: Failed to create directory: " . $webhookDataDir);
+                    $response['data_saved'] = false;
+                    $response['error'] = 'Failed to create webhook_data directory';
+                    break;
+                }
+                chmod($webhookDataDir, 0777);
             }
             
-            // Create filename with timestamp and delivery ID
-            $webhookFile = $webhookDataDir . '/push_' . date('Y-m-d_H-i-s') . '_' . $delivery . '.json';
+            // Create filename with timestamp and delivery ID (sanitize delivery ID)
+            $safeDelivery = preg_replace('/[^a-zA-Z0-9_-]/', '', $delivery);
+            $webhookFile = $webhookDataDir . '/push_' . date('Y-m-d_H-i-s') . '_' . $safeDelivery . '.json';
+            
+            error_log("Attempting to save webhook file: " . $webhookFile);
+            
             $webhookData = [
                 'event' => 'push',
                 'delivery_id' => $delivery,
                 'timestamp' => date('Y-m-d H:i:s'),
+                'repository' => $payload['repository']['full_name'] ?? 'unknown',
+                'branch' => str_replace('refs/heads/', '', $payload['ref'] ?? ''),
+                'pusher' => $payload['pusher']['name'] ?? 'unknown',
+                'commits_count' => count($payload['commits'] ?? []),
                 'payload' => $payload
             ];
             
-            if (file_put_contents($webhookFile, json_encode($webhookData, JSON_PRETTY_PRINT))) {
-                $response['data_saved'] = true;
-                $response['data_file'] = basename($webhookFile);
-                error_log("Push event data saved to: " . $webhookFile);
-            } else {
+            $jsonContent = json_encode($webhookData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            
+            if ($jsonContent === false) {
+                error_log("ERROR: Failed to encode JSON: " . json_last_error_msg());
                 $response['data_saved'] = false;
-                error_log("Failed to save push event data");
+                $response['error'] = 'Failed to encode webhook data as JSON';
+            } else {
+                $writeResult = file_put_contents($webhookFile, $jsonContent);
+                
+                if ($writeResult !== false) {
+                    $response['data_saved'] = true;
+                    $response['data_file'] = basename($webhookFile);
+                    $response['file_size'] = $writeResult;
+                    error_log("SUCCESS: Push event data saved to: " . $webhookFile . " (Size: " . $writeResult . " bytes)");
+                    
+                    // Verify file exists
+                    if (file_exists($webhookFile)) {
+                        error_log("VERIFIED: File exists at " . $webhookFile);
+                    } else {
+                        error_log("WARNING: File not found after writing: " . $webhookFile);
+                    }
+                } else {
+                    $response['data_saved'] = false;
+                    $response['error'] = 'Failed to write webhook data to file';
+                    error_log("ERROR: Failed to save push event data to: " . $webhookFile);
+                    error_log("ERROR: Check permissions for directory: " . $webhookDataDir);
+                }
             }
         }
         break;
