@@ -60,11 +60,14 @@ ini_set('error_log', $logsDir . '/jira_hook_errors.log');
 function extractJiraTicketId($branchName) {
     // Common Jira ticket patterns
     $patterns = [
-        '/([A-Z]{2,10}-\d+)/i',  // Standard JIRA format: PROJ-123
-        '/^([A-Z]{2,10}-\d+)/',  // At the beginning
-        '/\/([A-Z]{2,10}-\d+)/', // After slash (feature/PROJ-123)
+        '/\[([A-Z]+[0-9]+-\d+)\]/i',     // [P03-45] format with brackets
+        '/\[([A-Z]+-\d+)\]/i',            // [PROJ-123] format with brackets  
+        '/([A-Z]+[0-9]+-\d+)/i',          // P03-45, ABC1-234 mixed format
+        '/([A-Z]{1,10}-\d+)/i',           // Standard JIRA format: PROJ-123
+        '/^([A-Z]{1,10}-\d+)/',           // At the beginning
+        '/\/([A-Z]{1,10}-\d+)/',          // After slash (feature/PROJ-123)
     ];
-    
+
     foreach ($patterns as $pattern) {
         if (preg_match($pattern, $branchName, $matches)) {
             return strtoupper($matches[1]);
@@ -118,70 +121,248 @@ function parseAnalysisFile($filepath) {
     }
     
     // Extract analysis sections
-    if (preg_match('/📌 \*\*주요 변경사항\*\*:\s*(.+?)(?=\n\n|📁)/s', $content, $matches)) {
-        $data['main_changes'] = trim($matches[1]);
-    }
-    
-    if (preg_match('/📁 \*\*영향받는 모듈\*\*:\s*(.+?)(?=\n\n|🎯)/s', $content, $matches)) {
-        $data['affected_modules'] = trim($matches[1]);
-    }
-    
-    if (preg_match('/🎯 \*\*변경 목적\*\*:\s*(.+?)(?=\n\n|🔍)/s', $content, $matches)) {
-        $data['purpose'] = trim($matches[1]);
-    }
-    
-    if (preg_match('/🔍 \*\*코드 리뷰 포인트\*\*:\s*(.+?)(?=\n---|\n\n---)/s', $content, $matches)) {
-        $data['review_points'] = trim($matches[1]);
+    // Extract all analysis content after "## Claude AI Analysis" or "## Analysis Results"
+    if (preg_match('/##\s*(Claude AI Analysis|Analysis Results)\s*\n(.+?)(?=\n---|\Z)/s', $content, $matches)) {
+        $data['full_analysis'] = trim($matches[2]);
+        
+        // Also extract individual sections for backward compatibility
+        if (preg_match('/📌\s*\*\*주요 변경사항\*\*:\s*(.+?)(?=\n\n|📁|$)/s', $data['full_analysis'], $subMatches)) {
+            $data['main_changes'] = trim($subMatches[1]);
+        }
+        
+        if (preg_match('/📁\s*\*\*영향받는 모듈\*\*:\s*(.+?)(?=\n\n|🎯|$)/s', $data['full_analysis'], $subMatches)) {
+            $data['affected_modules'] = trim($subMatches[1]);
+        }
+        
+        if (preg_match('/🎯\s*\*\*변경 목적\*\*:\s*(.+?)(?=\n\n|🔍|$)/s', $data['full_analysis'], $subMatches)) {
+            $data['purpose'] = trim($subMatches[1]);
+        }
+        
+        if (preg_match('/🔍\s*\*\*코드 리뷰 포인트\*\*:\s*(.+?)$/s', $data['full_analysis'], $subMatches)) {
+            $data['review_points'] = trim($subMatches[1]);
+        }
     }
     
     return $data;
 }
 
 /**
+ * Convert Markdown to Jira markup
+ */
+function markdownToJira($text) {
+    // Headers
+    $text = preg_replace('/^### (.+)$/m', 'h3. $1', $text);
+    $text = preg_replace('/^## (.+)$/m', 'h2. $1', $text);
+    $text = preg_replace('/^# (.+)$/m', 'h1. $1', $text);
+    
+    // Bold - **text** or __text__ to *text*
+    $text = preg_replace('/\*\*(.+?)\*\*/', '*$1*', $text);
+    $text = preg_replace('/__(.+?)__/', '*$1*', $text);
+    
+    // Italic - *text* or _text_ to _text_
+    // Be careful not to affect already converted bold
+    $text = preg_replace('/(?<!\*)\*(?!\*)([^*]+?)(?<!\*)\*(?!\*)/', '_$1_', $text);
+    $text = preg_replace('/(?<!_)_(?!_)([^_]+?)(?<!_)_(?!_)/', '_$1_', $text);
+    
+    // Code blocks - ```code``` to {code}code{code}
+    $text = preg_replace('/```([^`]+?)```/s', '{code}$1{code}', $text);
+    
+    // Inline code - `code` to {{code}}
+    $text = preg_replace('/`([^`]+?)`/', '{{$1}}', $text);
+    
+    // Lists with emoji
+    $text = preg_replace('/^- 📌 (.+)$/m', '* (!) $1', $text);  // Important
+    $text = preg_replace('/^- 📁 (.+)$/m', '* (i) $1', $text);  // Info
+    $text = preg_replace('/^- 🎯 (.+)$/m', '* (/) $1', $text);  // Check
+    $text = preg_replace('/^- 🔍 (.+)$/m', '* (?) $1', $text);  // Question
+    
+    // Regular lists - * or - to *
+    $text = preg_replace('/^[\*\-]\s+(.+)$/m', '* $1', $text);
+    
+    // Numbered lists
+    $text = preg_replace('/^\d+\.\s+(.+)$/m', '# $1', $text);
+    
+    // Links - [text](url) to [text|url]
+    $text = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '[$1|$2]', $text);
+    
+    // Horizontal rules - --- to ----
+    $text = preg_replace('/^---+$/m', '----', $text);
+    
+    // Blockquotes - > text to {quote}text{quote}
+    $lines = explode("\n", $text);
+    $inQuote = false;
+    $result = [];
+    
+    foreach ($lines as $line) {
+        if (strpos($line, '> ') === 0) {
+            if (!$inQuote) {
+                $result[] = '{quote}';
+                $inQuote = true;
+            }
+            $result[] = substr($line, 2);
+        } else {
+            if ($inQuote) {
+                $result[] = '{quote}';
+                $inQuote = false;
+            }
+            $result[] = $line;
+        }
+    }
+    if ($inQuote) {
+        $result[] = '{quote}';
+    }
+    
+    $text = implode("\n", $result);
+    
+    // Tables (simple conversion)
+    $text = preg_replace('/\|(.+)\|/', '||$1||', $text);
+    
+    // Emojis in headers to Jira icons
+    $text = str_replace('📌', '(!)', $text);
+    $text = str_replace('📁', '(i)', $text);
+    $text = str_replace('🎯', '(/)', $text);
+    $text = str_replace('🔍', '(?)', $text);
+    $text = str_replace('📊', '(*)', $text);
+    $text = str_replace('🔄', '(on)', $text);
+    $text = str_replace('✅', '(/)', $text);
+    $text = str_replace('❌', '(x)', $text);
+    $text = str_replace('⚠️', '(!)', $text);
+    
+    return $text;
+}
+
+/**
  * Create Jira comment content from analysis data
  */
 function createJiraComment($analysisData) {
-    $comment = "*🔄 GitHub Push Analysis Report*\n\n";
+    // Build comment in Markdown first
+    $markdown = "# 🔄 GitHub Push Analysis Report\n\n";
     
-    $comment .= "Repository: {$analysisData['repository']}\n";
-    $comment .= "Branch: {$analysisData['branch']}\n";
-    $comment .= "Pusher: {$analysisData['pusher']}\n";
-    $comment .= "Commits: {$analysisData['commits']}\n";
-    $comment .= "Generated: {$analysisData['generated']}\n\n";
+    $markdown .= "**Repository:** {$analysisData['repository']}\n";
+    $markdown .= "**Branch:** {$analysisData['branch']}\n";
+    $markdown .= "**Pusher:** {$analysisData['pusher']}\n";
+    $markdown .= "**Commits:** {$analysisData['commits']}\n";
+    $markdown .= "**Generated:** {$analysisData['generated']}\n\n";
     
-    $comment .= "----\n\n";
+    $markdown .= "---\n\n";
     
-    if (isset($analysisData['main_changes'])) {
-        $comment .= "*📌 주요 변경사항*\n";
-        $comment .= "{$analysisData['main_changes']}\n\n";
+    // Use full analysis if available
+    if (isset($analysisData['full_analysis']) && !empty($analysisData['full_analysis'])) {
+        $markdown .= "## 📊 Claude AI Analysis\n\n";
+        $markdown .= $analysisData['full_analysis'] . "\n\n";
+    } else {
+        // Fallback to individual sections
+        if (isset($analysisData['main_changes'])) {
+            $markdown .= "## 📌 주요 변경사항\n";
+            $markdown .= "{$analysisData['main_changes']}\n\n";
+        }
+        
+        if (isset($analysisData['affected_modules'])) {
+            $markdown .= "## 📁 영향받는 모듈\n";
+            $markdown .= "{$analysisData['affected_modules']}\n\n";
+        }
+        
+        if (isset($analysisData['purpose'])) {
+            $markdown .= "## 🎯 변경 목적\n";
+            $markdown .= "{$analysisData['purpose']}\n\n";
+        }
+        
+        if (isset($analysisData['review_points'])) {
+            $markdown .= "## 🔍 코드 리뷰 포인트\n";
+            $markdown .= "{$analysisData['review_points']}\n\n";
+        }
     }
     
-    if (isset($analysisData['affected_modules'])) {
-        $comment .= "*📁 영향받는 모듈*\n";
-        $comment .= "{$analysisData['affected_modules']}\n\n";
+    $markdown .= "---\n";
+    $markdown .= "_This comment was automatically generated from GitHub push analysis_";
+    
+    // Convert Markdown to Jira format
+    return markdownToJira($markdown);
+}
+
+/**
+ * Get Jira issue details
+ */
+function getJiraIssue($ticketId) {
+    $url = JIRA_BASE_URL . "/rest/api/2/issue/{$ticketId}?fields=description,summary";
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Basic ' . base64_encode(JIRA_EMAIL . ':' . JIRA_API_TOKEN),
+        'Accept: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error || $httpCode !== 200) {
+        return null;
     }
     
-    if (isset($analysisData['purpose'])) {
-        $comment .= "*🎯 변경 목적*\n";
-        $comment .= "{$analysisData['purpose']}\n\n";
+    return json_decode($response, true);
+}
+
+/**
+ * Update Jira issue description
+ */
+function updateJiraDescription($ticketId, $description) {
+    $url = JIRA_BASE_URL . "/rest/api/2/issue/{$ticketId}";
+    
+    echo "  Updating issue description...\n";
+    
+    $data = [
+        'fields' => [
+            'description' => $description
+        ]
+    ];
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Basic ' . base64_encode(JIRA_EMAIL . ':' . JIRA_API_TOKEN),
+        'Content-Type: application/json',
+        'Accept: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+    
+    if ($error) {
+        echo "  ❌ CURL Error: {$error}\n";
+        return false;
     }
     
-    if (isset($analysisData['review_points'])) {
-        $comment .= "*🔍 코드 리뷰 포인트*\n";
-        $comment .= "{$analysisData['review_points']}\n\n";
+    if ($httpCode === 204 || $httpCode === 200) {
+        echo "  ✅ Description updated successfully\n";
+        return true;
+    } else {
+        echo "  ❌ Failed to update description (HTTP {$httpCode})\n";
+        return false;
     }
-    
-    $comment .= "----\n";
-    $comment .= "_This comment was automatically generated from GitHub push analysis_";
-    
-    return $comment;
 }
 
 /**
  * Send comment to Jira using REST API
  */
 function sendJiraComment($ticketId, $comment) {
-    $url = JIRA_BASE_URL . "/rest/api/3/issue/{$ticketId}/comment";
+    // Try API v2 first (more compatible)
+    $url = JIRA_BASE_URL . "/rest/api/2/issue/{$ticketId}/comment";
+    
+    // Log the API call details
+    echo "  API URL: {$url}\n";
+    echo "  Using credentials: " . JIRA_EMAIL . "\n";
+    echo "  API Token: " . (strlen(JIRA_API_TOKEN) > 10 ? substr(JIRA_API_TOKEN, 0, 4) . '...' . substr(JIRA_API_TOKEN, -4) : '***') . "\n";
     
     // Use simple format for better compatibility
     $data = [
@@ -198,23 +379,54 @@ function sendJiraComment($ticketId, $comment) {
         'Accept: application/json'
     ]);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_VERBOSE, false); // Set to true for more debug info
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
+    $curlInfo = curl_getinfo($ch);
     curl_close($ch);
     
+    echo "  HTTP Response Code: {$httpCode}\n";
+    echo "  Response Time: " . round($curlInfo['total_time'], 2) . "s\n";
+    
     if ($error) {
+        echo "  ❌ CURL Error: {$error}\n";
         error_log("CURL Error for ticket {$ticketId}: " . $error);
         return ['success' => false, 'error' => $error];
     }
     
     if ($httpCode >= 200 && $httpCode < 300) {
-        return ['success' => true, 'response' => json_decode($response, true)];
+        echo "  ✅ Success! Comment posted to Jira\n";
+        $responseData = json_decode($response, true);
+        if (isset($responseData['id'])) {
+            echo "  Comment ID: " . $responseData['id'] . "\n";
+        }
+        return ['success' => true, 'response' => $responseData, 'http_code' => $httpCode];
     } else {
+        echo "  ❌ Failed with HTTP {$httpCode}\n";
+        
+        // Parse error response
+        $errorData = json_decode($response, true);
+        if ($errorData) {
+            if (isset($errorData['errorMessages'])) {
+                echo "  Error: " . implode(', ', $errorData['errorMessages']) . "\n";
+            }
+            if (isset($errorData['errors'])) {
+                foreach ($errorData['errors'] as $field => $error) {
+                    echo "  Error in {$field}: {$error}\n";
+                }
+            }
+        } else {
+            echo "  Raw response: " . substr($response, 0, 200) . "\n";
+        }
+        
         error_log("Jira API Error for ticket {$ticketId}: HTTP {$httpCode} - " . $response);
-        return ['success' => false, 'error' => "HTTP {$httpCode}", 'response' => $response];
+        return ['success' => false, 'error' => "HTTP {$httpCode}", 'response' => $response, 'http_code' => $httpCode];
     }
 }
 
@@ -240,6 +452,7 @@ function processAnalysisFile($filepath) {
     
     if (isset($analysisData['commit_messages']) && is_array($analysisData['commit_messages'])) {
         echo "  Checking commit messages for Jira ticket ID...\n";
+        
         foreach ($analysisData['commit_messages'] as $commitMessage) {
             $ticketId = extractJiraTicketId($commitMessage);
             if ($ticketId) {
@@ -281,38 +494,70 @@ function processAnalysisFile($filepath) {
         return false;
     }
     
-    // Create Jira comment
-    $comment = createJiraComment($analysisData);
+    // Create content for Jira
+    $content = createJiraComment($analysisData);
     
-    // Send to Jira
-    echo "  Sending comment to Jira...\n";
-    $result = sendJiraComment($ticketId, $comment);
+    // Debug: Show what content will be sent
+    echo "  === Content to send ===\n";
+    echo "  " . str_replace("\n", "\n  ", substr($content, 0, 500)) . "\n";
+    if (strlen($content) > 500) {
+        echo "  ... (+" . (strlen($content) - 500) . " more characters)\n";
+    }
+    echo "  === End of content preview ===\n";
     
-    if ($result['success']) {
-        echo "  ✅ Comment posted successfully to {$ticketId}\n";
-        
-        // Move processed file
-        global $processedJiraDir, $logsDir;
-        $processedFile = $processedJiraDir . '/' . $filename;
-        if (rename($filepath, $processedFile)) {
-            echo "  📁 Moved to processed directory\n";
-        }
-        
-        // Log success
-        $logEntry = date('Y-m-d H:i:s') . " | SUCCESS | {$ticketId} | {$filename}\n";
-        file_put_contents($logsDir . '/jira_success.log', $logEntry, FILE_APPEND);
-        
-        return true;
-    } else {
-        echo "  ❌ Failed to post comment: {$result['error']}\n";
-        
-        // Log failure
-        global $logsDir;
-        $logEntry = date('Y-m-d H:i:s') . " | FAILED | {$ticketId} | {$filename} | {$result['error']}\n";
-        file_put_contents($logsDir . '/jira_failures.log', $logEntry, FILE_APPEND);
-        
+    // Check if issue exists and get its details
+    echo "  Checking Jira issue details...\n";
+    $issue = getJiraIssue($ticketId);
+    
+    if (!$issue) {
+        echo "  ❌ Could not retrieve issue details. The issue might not exist.\n";
         return false;
     }
+    
+    // Check if description is empty
+    $currentDescription = $issue['fields']['description'] ?? '';
+    $isDescriptionEmpty = empty(trim($currentDescription));
+    
+    if ($isDescriptionEmpty) {
+        echo "  📝 Description is empty. Updating description instead of adding comment.\n";
+        $result = updateJiraDescription($ticketId, $content);
+        
+        if ($result) {
+            echo "  ✅ Description updated successfully for {$ticketId}\n";
+            $actionType = 'description_updated';
+        } else {
+            echo "  ❌ Failed to update description\n";
+            return false;
+        }
+    } else {
+        echo "  💬 Description exists. Adding as comment.\n";
+        echo "  Current description length: " . strlen($currentDescription) . " characters\n";
+        
+        // Send as comment
+        echo "  Sending comment to Jira...\n";
+        $result = sendJiraComment($ticketId, $content);
+        
+        if ($result['success']) {
+            echo "  ✅ Comment posted successfully to {$ticketId}\n";
+            $actionType = 'comment_added';
+        } else {
+            echo "  ❌ Failed to post comment: {$result['error']}\n";
+            return false;
+        }
+    }
+    
+    // Move processed file
+    global $processedJiraDir, $logsDir;
+    $processedFile = $processedJiraDir . '/' . $filename;
+    if (rename($filepath, $processedFile)) {
+        echo "  📁 Moved to processed directory\n";
+    }
+    
+    // Log success
+    $logEntry = date('Y-m-d H:i:s') . " | SUCCESS | {$ticketId} | {$filename} | {$actionType}\n";
+    file_put_contents($logsDir . '/jira_success.log', $logEntry, FILE_APPEND);
+    
+    return true;
 }
 
 /**
