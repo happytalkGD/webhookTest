@@ -159,7 +159,7 @@ function analyzePushEvent($webhookData) {
     $prompt .= "🎯 **변경 목적**: (커밋 메시지와 코드 변경 기반 추측)\n";
     $prompt .= "🔍 **코드 리뷰 포인트**: (주의해서 봐야 할 부분)\n";
     $prompt .= "\n전체 500 줄 이내로 자세하게 작성해주세요.\n";
-    $prompt .= "\n추가 권장사항은 제외해 주세요.";
+    $prompt .= "\n작업된 내용 작성하고 추가 사항을 적는것은 금지 합니다.";
     
     // Escape the system prompt for shell command
     $escapedSystemPrompt = str_replace("\n", "\\n", addslashes($systemPrompt));
