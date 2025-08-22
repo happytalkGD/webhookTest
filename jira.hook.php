@@ -4,6 +4,16 @@
  * Reads analysis files and posts comments to Jira issues based on branch names
  */
 
+// Check for required PHP extensions
+if (!extension_loaded('curl')) {
+    echo "ERROR: PHP curl extension is not installed.\n";
+    echo "To install on Ubuntu/Debian: sudo apt-get install php-curl\n";
+    echo "To install on CentOS/RHEL: sudo yum install php-curl\n";
+    echo "After installation, restart your web server or PHP service.\n\n";
+    echo "Alternative: Use the jira_integration.sh script instead.\n";
+    exit(1);
+}
+
 // Load environment variables from .env file if it exists
 $envFile = dirname(__FILE__) . '/.env';
 if (file_exists($envFile)) {
@@ -170,6 +180,9 @@ function markdownToJira($text) {
     // Inline code - `code` to {{code}}
     $text = preg_replace('/`([^`]+?)`/', '{{$1}}', $text);
     
+    // Clean up excessive line breaks first
+    $text = preg_replace('/\n{3,}/', "\n\n", $text);  // Replace 3+ newlines with 2
+    
     // Lists with emoji
     $text = preg_replace('/^- 📌 (.+)$/m', '* (!) $1', $text);  // Important
     $text = preg_replace('/^- 📁 (.+)$/m', '* (i) $1', $text);  // Info
@@ -179,8 +192,13 @@ function markdownToJira($text) {
     // Regular lists - * or - to *
     $text = preg_replace('/^[\*\-]\s+(.+)$/m', '* $1', $text);
     
-    // Numbered lists
-    $text = preg_replace('/^\d+\.\s+(.+)$/m', '# $1', $text);
+    // Numbered lists - only convert actual numbered lists with content
+    $text = preg_replace('/^\d+\.\s+([^\s].+)$/m', '# $1', $text);
+    
+    // Remove standalone numbers/letters that are not part of lists
+    $text = preg_replace('/^[0-9]+\.\s*$/m', '', $text);  // Remove "1." on its own line
+    $text = preg_replace('/^[a-z]\.\s*$/m', '', $text);   // Remove "a." on its own line
+    $text = preg_replace('/^[i]+\.\s*$/m', '', $text);    // Remove "i." on its own line
     
     // Links - [text](url) to [text|url]
     $text = preg_replace('/\[([^\]]+)\]\(([^)]+)\)/', '[$1|$2]', $text);
@@ -227,6 +245,10 @@ function markdownToJira($text) {
     $text = str_replace('✅', '(/)', $text);
     $text = str_replace('❌', '(x)', $text);
     $text = str_replace('⚠️', '(!)', $text);
+    
+    // Final cleanup - remove empty lines created by removing standalone list markers
+    $text = preg_replace('/\n{3,}/', "\n\n", $text);  // Replace 3+ newlines with 2
+    $text = preg_replace('/\n\s*\n/', "\n\n", $text); // Clean up lines with only whitespace
     
     return $text;
 }
