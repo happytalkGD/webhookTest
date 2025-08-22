@@ -4,7 +4,7 @@
 # Processes webhook data files and generates analysis reports
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEBHOOK_DATA_DIR="$SCRIPT_DIR/webhook_data"
 ANALYSIS_DIR="$SCRIPT_DIR/analysis"
 PROCESSED_DIR="$SCRIPT_DIR/processed_webhooks"
@@ -44,18 +44,23 @@ fi
 
 # Find JSON files to process
 echo "Checking for webhook files..."
-files=($WEBHOOK_DATA_DIR/*.json)
 
-if [ ! -e "${files[0]}" ]; then
+# Count files first
+file_count=$(ls -1 $WEBHOOK_DATA_DIR/*.json 2>/dev/null | wc -l)
+
+if [ "$file_count" -eq 0 ]; then
     echo -e "${YELLOW}No webhook files to process${NC}"
     exit 0
 fi
 
-echo "Found ${#files[@]} webhook file(s) to process"
+echo "Found $file_count webhook file(s) to process"
 echo ""
 
 # Process each file
-for file in "${files[@]}"; do
+for file in $WEBHOOK_DATA_DIR/*.json; do
+    if [ ! -f "$file" ]; then
+        continue
+    fi
     filename=$(basename "$file")
     echo "Processing: $filename"
     

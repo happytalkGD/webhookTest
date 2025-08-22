@@ -1,5 +1,7 @@
 .idea/
+.env
 logs
 source
 processed_webhooks/
 analysis/
+processed_jira/
