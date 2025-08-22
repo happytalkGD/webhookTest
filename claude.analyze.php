@@ -212,7 +212,8 @@ function analyzePushEvent($webhookData) {
     $fileContent .= "## Commit Details\n\n";
     foreach ($commitInfo as $idx => $commit) {
         $fileContent .= "### " . ($idx + 1) . ". " . $commit['message'] . "\n";
-        $fileContent .= "- **ID**: " . substr($commit['id'], 0, 7) . "\n";
+        $fileContent .= "- **Commit Hash**: `" . $commit['id'] . "`\n";
+        $fileContent .= "- **Short Hash**: `" . substr($commit['id'], 0, 7) . "`\n";
         $fileContent .= "- **Author**: " . $commit['author'] . "\n";
         $fileContent .= "- **Timestamp**: " . $commit['timestamp'] . "\n";
         $fileContent .= "- **Changes**: Added " . $commit['added'] . ", Modified " . $commit['modified'] . ", Removed " . $commit['removed'] . " files\n";
