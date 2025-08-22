@@ -39,7 +39,9 @@ markdown_to_jira() {
     # Clean up excessive line breaks first (3+ newlines to 2)
     text=$(echo "$text" | sed ':a;N;$!ba;s/\n\n\n\+/\n\n/g')
     
-    # Headers - Process 4-level headers first, treating numbered h4 as bold items
+    # Headers - Process 5-level headers first, then 4-level, treating numbered h4 as bold items
+    # Convert ##### text to h5. text (5-level headers)
+    text=$(echo "$text" | sed 's/^##### \(.*\)$/h5. \1/g')
     # Convert #### 1. **text** to *1. text* (bold numbered item)
     text=$(echo "$text" | sed 's/^#### \([0-9]\+\.\) \*\*\(.*\)\*\*$/*\1 \2*/g')
     text=$(echo "$text" | sed 's/^#### \(.*\)$/h4. \1/g')

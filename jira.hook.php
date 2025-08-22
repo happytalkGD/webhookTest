@@ -160,7 +160,9 @@ function parseAnalysisFile($filepath) {
  * Convert Markdown to Jira markup
  */
 function markdownToJira($text) {
-    // Headers - Process 4-level headers first, treating numbered h4 as bold items
+    // Headers - Process 5-level headers first, then 4-level, treating numbered h4 as bold items
+    // Convert ##### text to h5. text (5-level headers)
+    $text = preg_replace('/^#####\s+(.+)$/m', 'h5. $1', $text);
     // Convert #### 1. **text** to *1. text* (bold numbered item)
     $text = preg_replace('/^####\s+(\d+\.)\s+\*\*(.+?)\*\*$/m', '*$1 $2*', $text);
     $text = preg_replace('/^####\s+(.+)$/m', 'h4. $1', $text);
