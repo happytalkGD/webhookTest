@@ -147,7 +147,7 @@ function analyzePushEvent($webhookData) {
     
     $prompt .= "\n=== Git 분석 작업 ===\n";
     $prompt .= "source 폴더로 이동하여 다음 git 명령을 실행하고 분석해주세요:\n";
-    $prompt .= "1. cd ./source\n";
+    $prompt .= "1. cd ./source/{$repoName}\n";
     $prompt .= "2. git diff " . substr($beforeCommit, 0, 7) . ".." . substr($afterCommit, 0, 7) . "\n";
     $prompt .= "3. git log --oneline " . substr($beforeCommit, 0, 7) . ".." . substr($afterCommit, 0, 7) . "\n";
     $prompt .= "4. 변경된 파일들의 주요 코드 변경사항을 분석해주세요.\n";
@@ -157,7 +157,6 @@ function analyzePushEvent($webhookData) {
     $prompt .= "📌 **주요 변경사항**: (1-2줄로 핵심 변경 내용)\n";
     $prompt .= "📁 **영향받는 모듈**: (주요 파일/디렉토리)\n";
     $prompt .= "🎯 **변경 목적**: (커밋 메시지와 코드 변경 기반 추측)\n";
-    $prompt .= "🔍 **코드 리뷰 포인트**: (주의해서 봐야 할 부분)\n";
     $prompt .= "\n전체 500 줄 이내로 자세하게 작성해주세요.\n";
     $prompt .= "\n작업된 내용 작성하고 추가 사항을 적는것은 금지 합니다.";
     

@@ -93,10 +93,10 @@ crontab -e
 
 ```bash
 # 분석: 매분 실행
-* * * * * cd /home/gd/webhookTest && php claude.analyze.php >> logs/cron_analyze.log 2>&1
+* * * * * cd /var/www/html/webhookTest && php claude.analyze.php >> logs/cron_analyze.log 2>&1
 
 # Jira 통합: 2분마다 실행 (분석 완료 후)
-*/2 * * * * cd /home/gd/webhookTest && php jira.hook.php >> logs/cron_jira.log 2>&1
+*/2 * * * * cd /var/www/html/webhookTest && php jira.hook.php >> logs/cron_jira.log 2>&1
 ```
 
 ## GitHub 웹훅 설정
