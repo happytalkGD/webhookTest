@@ -107,7 +107,7 @@ function analyzePushEvent($webhookData) {
     }
     
     // System prompt for Claude
-    $systemPrompt = "You are a Git commit analyzer. Analyze the provided Git repository changes and provide a detailed summary in Korean. You have access to a git repository located at ./source directory.";
+    $systemPrompt = "You are a Git commit analyzer. Analyze the provided Git repository changes and provide a detailed summary in Korean. You can fetch and analyze GitHub repository changes using the compare URL provided.";
     
     // Build the prompt
     $prompt = "다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.\n\n";
@@ -131,16 +131,38 @@ function analyzePushEvent($webhookData) {
         }
     }
     
-    $prompt .= "\n=== Git 분석 작업 ===\n";
-    $prompt .= "source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:\n";
-    $prompt .= "source >  cd ./source/{$repoName}\n";
+    // Extract compare URL from webhook payload
+    $compareUrl = $payload['repository']['compare_url'] ?? '';
+    if (!empty($compareUrl) && !empty($beforeCommit) && !empty($afterCommit)) {
+        // Build actual compare URL
+        $actualCompareUrl = str_replace(
+            ['{base}', '{head}'],
+            [$beforeCommit, $afterCommit],
+            $compareUrl
+        );
+        
+        $prompt .= "\n=== Git 분석 작업 ===\n";
+        $prompt .= "다음 GitHub Compare API URL을 사용하여 변경사항을 분석해주세요:\n";
+        $prompt .= "Compare URL: " . $actualCompareUrl . "\n";
+        $prompt .= "\n이 URL을 통해 두 커밋 간의 차이점을 직접 확인하고 분석해주세요.\n";
+        $prompt .= "URL에서 다음 정보를 확인할 수 있습니다:\n";
+        $prompt .= "- 변경된 파일 목록 (files)\n";
+        $prompt .= "- 각 파일의 patch (코드 diff)\n";
+        $prompt .= "- 추가/삭제된 줄 수 (additions/deletions)\n";
+        $prompt .= "- 파일 상태 (added/modified/removed)\n";
+    } else {
+        $prompt .= "\n=== Git 분석 작업 ===\n";
+        $prompt .= "source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:\n";
+        $prompt .= "source >  cd ./source/{$repoName}\n";
+    }
     $prompt .= "\n=== 요약 형식 ===\n";
     $prompt .= "다음 형식으로 요약해주세요:\n";
     $prompt .= "📌 **주요 변경사항**: (1-2줄로 핵심 변경 내용)\n";
     $prompt .= "📁 **영향받는 모듈**: (주요 파일/디렉토리)\n";
     $prompt .= "🎯 **변경 목적**: (커밋 메시지와 코드 변경 기반 추측)\n";
     $prompt .= "\n전체 300 줄 이내로 자세하게 작성해주세요.\n";
-    $prompt .= "\n작업된 내용 작성하고 추가 사항을 적는것은 금지 합니다.";
+    $prompt .= "\n작업된 내용 작성하고 제안 사항을 적는것은 금지 합니다.\n";
+    $prompt .= "\n중요: GitHub Compare API를 직접 호출하여 실제 코드 변경사항을 확인한 후 분석해주세요.";
     
     // Escape the system prompt for shell command
     $escapedSystemPrompt = str_replace("\n", "\\n", addslashes($systemPrompt));
