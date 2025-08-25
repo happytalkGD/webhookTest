@@ -4,11 +4,11 @@
  * Receives GitHub webhook events and logs them
  */
 
-// Error reporting for debugging
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-ini_set('error_log', dirname(__FILE__) . '/logs/webhook_errors.log');
+// Include common library
+require_once dirname(__FILE__) . '/common.lib.php';
+
+// Initialize environment
+$dirs = initializeEnvironment('github_hook');
 
 // Set response header
 header('Content-Type: application/json');
@@ -42,7 +42,7 @@ try {
     $rawPayload = file_get_contents('php://input');
     
     // Webhook secret (configured in GitHub webhook settings)
-    $webhookSecret = 'test123';
+    $webhookSecret = getConfig('WEBHOOK_SECRET', 'test123');
     
     // Verify signature - GitHub may send either SHA1 or SHA256
     if ($webhookSecret && ($signature256 || $signature)) {
@@ -83,16 +83,8 @@ try {
         exit;
     }
     
-    // Create log directory if it doesn't exist
-    $logDir = dirname(__FILE__) . '/logs';
-    if (!is_dir($logDir)) {
-        if (!mkdir($logDir, 0777, true)) {
-            error_log("Failed to create log directory: $logDir");
-            http_response_code(500);
-            echo json_encode(['error' => 'Failed to create log directory']);
-            exit;
-        }
-    }
+    // Log directory already ensured by initializeEnvironment
+    $logDir = $dirs['logs'];
 
 // Prepare log data
 $logData = [
@@ -138,19 +130,7 @@ switch ($event) {
             $response['commits_count'] = count($payload['commits']);
             
             // Save webhook data for later analysis
-            $webhookDataDir = dirname(__FILE__) . '/pending_webhooks';
-            
-            // Debug: Check directory creation
-            if (!is_dir($webhookDataDir)) {
-                error_log("Creating pending_webhooks directory: " . $webhookDataDir);
-                if (!mkdir($webhookDataDir, 0777, true)) {
-                    error_log("ERROR: Failed to create directory: " . $webhookDataDir);
-                    $response['data_saved'] = false;
-                    $response['error'] = 'Failed to create pending_webhooks directory';
-                    break;
-                }
-                chmod($webhookDataDir, 0777);
-            }
+            $webhookDataDir = $dirs['pending_webhooks'];
             
             // Create filename with timestamp and delivery ID (sanitize delivery ID)
             $safeDelivery = preg_replace('/[^a-zA-Z0-9_-]/', '', $delivery);
@@ -169,7 +149,7 @@ switch ($event) {
                 'payload' => $payload
             ];
             
-            $jsonContent = json_encode($webhookData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            $jsonContent = safeJsonEncode($webhookData);
             
             if ($jsonContent === false) {
                 error_log("ERROR: Failed to encode JSON: " . json_last_error_msg());

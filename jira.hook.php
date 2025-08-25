@@ -14,78 +14,23 @@ if (!extension_loaded('curl')) {
     exit(1);
 }
 
-// Load environment variables from .env file if it exists
-$envFile = dirname(__FILE__) . '/.env';
-if (file_exists($envFile)) {
-    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    foreach ($lines as $line) {
-        // Skip comments
-        if (strpos(trim($line), '#') === 0) {
-            continue;
-        }
-        
-        // Parse KEY=VALUE
-        if (strpos($line, '=') !== false) {
-            list($key, $value) = explode('=', $line, 2);
-            $key = trim($key);
-            $value = trim($value);
-            
-            // Remove quotes if present
-            $value = trim($value, '"\'');
-            
-            // Set as environment variable
-            putenv("$key=$value");
-            $_ENV[$key] = $value;
-        }
-    }
-}
+// Include common library
+require_once dirname(__FILE__) . '/common.lib.php';
+
+// Initialize environment
+$dirs = initializeEnvironment('jira_hook');
 
 // Configuration - Get from environment or use defaults
-define('JIRA_BASE_URL', getenv('JIRA_BASE_URL') ?: 'https://your-domain.atlassian.net');
-define('JIRA_EMAIL', getenv('JIRA_EMAIL') ?: 'your-email@example.com');
-define('JIRA_API_TOKEN', getenv('JIRA_API_TOKEN') ?: 'your-api-token');
+define('JIRA_BASE_URL', getConfig('JIRA_BASE_URL', 'https://your-domain.atlassian.net'));
+define('JIRA_EMAIL', getConfig('JIRA_EMAIL', 'your-email@example.com'));
+define('JIRA_API_TOKEN', getConfig('JIRA_API_TOKEN', 'your-api-token'));
 
 // Directories
-$analysisDir = dirname(__FILE__) . '/pending_analysis';
-$processedJiraDir = dirname(__FILE__) . '/processed_jira';
-$logsDir = dirname(__FILE__) . '/logs';
+$analysisDir = $dirs['pending_analysis'];
+$processedJiraDir = $dirs['processed_jira'];
+$logsDir = $dirs['logs'];
 
-// Create necessary directories
-foreach ([$processedJiraDir, $logsDir] as $dir) {
-    if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
-    }
-}
-
-// Setup error logging
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-ini_set('error_log', $logsDir . '/jira_hook_errors.log');
-
-/**
- * Extract Jira ticket ID from branch name
- * Supports patterns like: PROJ-123, ABC-456-feature, feature/XYZ-789
- */
-function extractJiraTicketId($branchName) {
-    // Common Jira ticket patterns
-    $patterns = [
-        '/\[([A-Z]+[0-9]+-\d+)\]/i',     // [P03-45] format with brackets
-        '/\[([A-Z]+-\d+)\]/i',            // [PROJ-123] format with brackets  
-        '/([A-Z]+[0-9]+-\d+)/i',          // P03-45, ABC1-234 mixed format
-        '/([A-Z]{1,10}-\d+)/i',           // Standard JIRA format: PROJ-123
-        '/^([A-Z]{1,10}-\d+)/',           // At the beginning
-        '/\/([A-Z]{1,10}-\d+)/',          // After slash (feature/PROJ-123)
-    ];
-
-    foreach ($patterns as $pattern) {
-        if (preg_match($pattern, $branchName, $matches)) {
-            return strtoupper($matches[1]);
-        }
-    }
-    
-    return null;
-}
+// extractJiraTicketId function is now in common.lib.php
 
 /**
  * Parse analysis markdown file
@@ -570,10 +515,7 @@ function processAnalysisFile($filepath) {
     
     // Move processed file
     global $processedJiraDir, $logsDir;
-    $processedFile = $processedJiraDir . '/' . $filename;
-    if (rename($filepath, $processedFile)) {
-        echo "  📁 Moved to processed directory\n";
-    }
+    moveToProcessed($filepath, $processedJiraDir);
     
     // Log success
     $logEntry = date('Y-m-d H:i:s') . " | SUCCESS | {$ticketId} | {$filename} | {$actionType}\n";
@@ -616,68 +558,22 @@ function processAnalysisFiles() {
 }
 
 // Check if script is run from command line
-if (php_sapi_name() === 'cli') {
+if (isCliMode()) {
     echo "=== Jira Integration Hook ===\n";
     echo "Time: " . date('Y-m-d H:i:s') . "\n\n";
     
-    // Lock file to prevent duplicate runs
-    $lockFile = dirname(__FILE__) . '/locks/jira_hook.lock';
-    $lockDir = dirname($lockFile);
+    // Create lock manager
+    $lockManager = new LockManager('jira_hook');
     
-    // Create lock directory if it doesn't exist
-    if (!is_dir($lockDir)) {
-        mkdir($lockDir, 0777, true);
-    }
-    
-    // Check if lock file exists and if it's stale
-    if (file_exists($lockFile)) {
-        $lockAge = time() - filemtime($lockFile);
-        // If lock is older than 5 minutes, consider it stale
-        if ($lockAge < 300) {
-            echo "⚠️  Another instance is already running (lock age: {$lockAge} seconds)\n";
-            echo "Lock file: {$lockFile}\n";
-            echo "If you're sure no other instance is running, delete the lock file and try again.\n";
-            exit(0);
-        } else {
-            echo "⚠️  Stale lock file found (age: {$lockAge} seconds), removing it...\n";
-            unlink($lockFile);
-        }
-    }
-    
-    // Create lock file
-    if (!touch($lockFile)) {
-        echo "❌ Failed to create lock file\n";
-        exit(1);
-    }
-    
-    // Register shutdown function to remove lock file
-    register_shutdown_function(function() use ($lockFile) {
-        if (file_exists($lockFile)) {
-            unlink($lockFile);
-            echo "Lock file removed.\n";
-        }
-    });
-    
-    // Also handle signals for clean shutdown
-    if (function_exists('pcntl_signal')) {
-        pcntl_signal(SIGINT, function() use ($lockFile) {
-            if (file_exists($lockFile)) {
-                unlink($lockFile);
-            }
-            exit(0);
-        });
-        pcntl_signal(SIGTERM, function() use ($lockFile) {
-            if (file_exists($lockFile)) {
-                unlink($lockFile);
-            }
-            exit(0);
-        });
+    // Try to acquire lock
+    if (!$lockManager->acquireLock()) {
+        exit(0);
     }
     
     // Check configuration
     if (JIRA_BASE_URL === 'https://your-domain.atlassian.net') {
-        echo "⚠️  WARNING: Jira configuration not set!\n";
-        echo "Please update the following constants in this file:\n";
+        displayMessage("WARNING: Jira configuration not set!", 'warning');
+        echo "Please update the following constants in .env file:\n";
         echo "  - JIRA_BASE_URL\n";
         echo "  - JIRA_EMAIL\n";
         echo "  - JIRA_API_TOKEN\n\n";
@@ -689,9 +585,8 @@ if (php_sapi_name() === 'cli') {
     echo "\nFinished at: " . date('Y-m-d H:i:s') . "\n";
 } else {
     // If accessed via web, return JSON response
-    header('Content-Type: application/json');
-    echo json_encode([
+    jsonResponse([
         'error' => 'This script must be run from command line',
         'usage' => 'php jira.hook.php'
-    ]);
+    ], 403);
 }

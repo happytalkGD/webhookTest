@@ -4,23 +4,16 @@
  * Reads saved webhook data files and analyzes them with Claude
  */
 
-// Error reporting for debugging
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-ini_set('error_log', dirname(__FILE__) . '/logs/analysis_errors.log');
+// Include common library
+require_once dirname(__FILE__) . '/common.lib.php';
+
+// Initialize environment
+$dirs = initializeEnvironment('claude_analyze');
 
 // Configuration
-$webhookDataDir = dirname(__FILE__) . '/pending_webhooks';
-$analysisDir = dirname(__FILE__) . '/pending_analysis';
-$processedDir = dirname(__FILE__) . '/processed_webhooks';
-
-// Create necessary directories
-foreach ([$analysisDir, $processedDir] as $dir) {
-    if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
-    }
-}
+$webhookDataDir = $dirs['pending_webhooks'];
+$analysisDir = $dirs['pending_analysis'];
+$processedDir = $dirs['processed_webhooks'];
 
 /**
  * Main processing function
@@ -44,10 +37,10 @@ function processWebhookFiles() {
         try {
             // Read and decode JSON file
             $jsonContent = file_get_contents($file);
-            $webhookData = json_decode($jsonContent, true);
+            $webhookData = safeJsonDecode($jsonContent);
             
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new Exception("Invalid JSON in file: " . json_last_error_msg());
+            if ($webhookData === null) {
+                throw new Exception("Invalid JSON in file");
             }
             
             // Process based on event type
@@ -59,14 +52,7 @@ function processWebhookFiles() {
                     echo "  → Saved to: " . $result['file'] . "\n";
                     
                     // Move processed file to processed directory
-                    $processedFile = $processedDir . '/' . basename($file);
-                    if (rename($file, $processedFile)) {
-                        echo "  → Moved to processed directory\n";
-                    } else {
-                        // If move fails, delete the original file
-                        unlink($file);
-                        echo "  → Original file deleted\n";
-                    }
+                    moveToProcessed($file, $processedDir);
                 } else {
                     echo "  ✗ Analysis failed: " . $result['error'] . "\n";
                 }
@@ -255,62 +241,16 @@ function analyzePushEvent($webhookData) {
 }
 
 // Check if script is run from command line
-if (php_sapi_name() === 'cli') {
+if (isCliMode()) {
     echo "=== Claude Summaries Processor ===\n";
     echo "Starting at: " . date('Y-m-d H:i:s') . "\n\n";
     
-    // Lock file to prevent duplicate runs
-    $lockFile = dirname(__FILE__) . '/locks/claude_analyze.lock';
-    $lockDir = dirname($lockFile);
+    // Create lock manager
+    $lockManager = new LockManager('claude_analyze');
     
-    // Create lock directory if it doesn't exist
-    if (!is_dir($lockDir)) {
-        mkdir($lockDir, 0777, true);
-    }
-    
-    // Check if lock file exists and if it's stale
-    if (file_exists($lockFile)) {
-        $lockAge = time() - filemtime($lockFile);
-        // If lock is older than 5 minutes, consider it stale
-        if ($lockAge < 300) {
-            echo "⚠️  Another instance is already running (lock age: {$lockAge} seconds)\n";
-            echo "Lock file: {$lockFile}\n";
-            echo "If you're sure no other instance is running, delete the lock file and try again.\n";
-            exit(0);
-        } else {
-            echo "⚠️  Stale lock file found (age: {$lockAge} seconds), removing it...\n";
-            unlink($lockFile);
-        }
-    }
-    
-    // Create lock file
-    if (!touch($lockFile)) {
-        echo "❌ Failed to create lock file\n";
-        exit(1);
-    }
-    
-    // Register shutdown function to remove lock file
-    register_shutdown_function(function() use ($lockFile) {
-        if (file_exists($lockFile)) {
-            unlink($lockFile);
-            echo "Lock file removed.\n";
-        }
-    });
-    
-    // Also handle signals for clean shutdown
-    if (function_exists('pcntl_signal')) {
-        pcntl_signal(SIGINT, function() use ($lockFile) {
-            if (file_exists($lockFile)) {
-                unlink($lockFile);
-            }
-            exit(0);
-        });
-        pcntl_signal(SIGTERM, function() use ($lockFile) {
-            if (file_exists($lockFile)) {
-                unlink($lockFile);
-            }
-            exit(0);
-        });
+    // Try to acquire lock
+    if (!$lockManager->acquireLock()) {
+        exit(0);
     }
     
     processWebhookFiles();
@@ -318,9 +258,8 @@ if (php_sapi_name() === 'cli') {
     echo "\nFinished at: " . date('Y-m-d H:i:s') . "\n";
 } else {
     // If accessed via web, return JSON response
-    header('Content-Type: application/json');
-    echo json_encode([
+    jsonResponse([
         'error' => 'This script must be run from command line',
-        'usage' => 'php claude.summaries.php'
-    ]);
+        'usage' => 'php claude.analyze.php'
+    ], 403);
 }
