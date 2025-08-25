@@ -9,7 +9,9 @@ GitHub Push → github.hook.php → claude.analyze.php → jira.hook.php → Jir
 ```
 
 1. **github.hook.php**: GitHub 웹훅을 받아서 `pending_webhooks/`에 저장
-2. **claude.analyze.php**: 웹훅 데이터를 Claude AI로 분석해서 `pending_analysis/`에 마크다운 파일 저장  
+2. **claude.analyze.php**: 웹훅 데이터를 Claude AI로 분석해서 `pending_analysis/`에 마크다운 파일 저장
+   - GitHub Compare API를 통해 실제 코드 변경사항 분석
+   - `compare_url`을 활용한 직접적인 diff 분석
 3. **jira.hook.php**: 분석 파일을 읽어서 Jira 티켓에 댓글/설명 추가
 
 ## 디렉토리 구조
@@ -17,10 +19,11 @@ GitHub Push → github.hook.php → claude.analyze.php → jira.hook.php → Jir
 ```
 webhookTest/
 ├── github.hook.php          # GitHub 웹훅 핸들러
-├── claude.analyze.php       # Claude AI 분석 스크립트
+├── claude.analyze.php       # Claude AI 분석 스크립트 (GitHub API 연동)
 ├── jira.hook.php           # Jira 통합 스크립트 (PHP)
 ├── jira_integration.sh     # Jira 통합 스크립트 (Shell)
 ├── common.lib.php          # 공통 라이브러리
+├── test_compare_url.php    # GitHub Compare API 테스트 스크립트
 ├── .env                    # 환경 설정 파일
 ├── pending_webhooks/       # 처리 대기 중인 웹훅 데이터
 ├── pending_analysis/       # 처리 대기 중인 분석 파일
@@ -129,6 +132,9 @@ tail -f logs/summary.log
 # 웹훅 분석 실행
 php claude.analyze.php
 
+# GitHub Compare API 테스트
+php test_compare_url.php
+
 # Jira 통합 실행 (PHP)
 php jira.hook.php
 
@@ -196,6 +202,9 @@ tail -f logs/cron_jira.log
    
    # 권한 확인
    ls -la pending_webhooks/
+   
+   # GitHub Compare API 테스트
+   php test_compare_url.php
    ```
 
 3. **Jira 연결 실패**
@@ -217,6 +226,37 @@ tail -f logs/cron_jira.log
 ```bash
 # PHP 에러 표시 활성화 (개발 시에만)
 sed -i 's/ini_set('\''display_errors'\'', 0)/ini_set('\''display_errors'\'', 1)/' *.php
+```
+
+## Claude AI 분석 기능
+
+### GitHub Compare API 연동
+
+claude.analyze.php는 이제 GitHub Compare API를 직접 활용하여 더 정확한 코드 분석을 제공합니다:
+
+1. **Compare URL 자동 생성**
+   - 웹훅 데이터에서 `compare_url` 템플릿 추출
+   - `{base}`와 `{head}`를 실제 커밋 해시로 치환
+   - 예: `https://api.github.com/repos/owner/repo/compare/abc123...def456`
+
+2. **직접적인 코드 Diff 분석**
+   - Claude가 GitHub API를 호출하여 실제 변경사항 확인
+   - 파일별 patch (diff) 정보 분석
+   - 추가/삭제된 줄 수 및 코드 내용 파악
+
+3. **분석 품질 향상**
+   - 로컬 저장소 의존성 제거
+   - 실시간 GitHub 데이터 활용
+   - 더 정확한 코드 변경 의도 파악
+
+### 테스트 방법
+
+```bash
+# Compare URL 프롬프트 테스트
+php test_compare_url.php
+
+# 실제 웹훅 데이터로 분석 실행
+php claude.analyze.php
 ```
 
 ## 보안 고려사항

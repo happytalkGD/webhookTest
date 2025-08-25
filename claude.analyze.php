@@ -160,8 +160,9 @@ function analyzePushEvent($webhookData) {
     $prompt .= "📌 **주요 변경사항**: (1-2줄로 핵심 변경 내용)\n";
     $prompt .= "📁 **영향받는 모듈**: (주요 파일/디렉토리)\n";
     $prompt .= "🎯 **변경 목적**: (커밋 메시지와 코드 변경 기반 추측)\n";
-    $prompt .= "\n전체 300 줄 이내로 자세하게 작성해주세요.\n";
-    $prompt .= "\n작업된 내용 작성하고 제안 사항을 적는것은 금지 합니다.\n";
+    
+    $prompt .= "\n문서 길이는 전체 150 Line 이내로 작성해주세요.\n";
+    $prompt .= "\n작업된 내용만 작성하고 제안 사항을 적는것은 금지 합니다.\n";
     $prompt .= "\n중요: GitHub Compare API를 직접 호출하여 실제 코드 변경사항을 확인한 후 분석해주세요.";
     
     // Escape the system prompt for shell command
