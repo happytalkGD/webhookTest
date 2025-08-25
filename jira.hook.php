@@ -413,10 +413,20 @@ function processAnalysisFile($filepath) {
     }
     
     // Check for execution errors in the analysis
+    // Look for actual Claude execution errors (not just the string in code analysis)
     $fileContent = file_get_contents($filepath);
-    if (stripos($fileContent, 'Execution error') !== false) {
-        echo "  ❌ EXECUTION ERROR DETECTED in analysis file!\n";
-        echo "  ⚠️  Analysis contains execution errors - skipping Jira posting\n";
+    // Check for Claude CLI error patterns - more specific than just "Execution error"
+    $isClaudeError = false;
+    if (preg_match('/^Execution error:.*$/m', $fileContent) ||
+        preg_match('/^Error executing Claude command.*$/m', $fileContent) ||
+        preg_match('/^Claude return code: [^0].*$/m', $fileContent) ||
+        preg_match('/^Claude analysis failed.*$/m', $fileContent)) {
+        $isClaudeError = true;
+    }
+    
+    if ($isClaudeError) {
+        echo "  ❌ CLAUDE EXECUTION ERROR DETECTED in analysis file!\n";
+        echo "  ⚠️  Analysis contains Claude execution errors - skipping Jira posting\n";
         echo "  📝 Please check the analysis file for errors:\n";
         echo "     " . basename($filepath) . "\n";
         
@@ -433,7 +443,7 @@ function processAnalysisFile($filepath) {
         }
         
         // Log the error
-        $logEntry = date('Y-m-d H:i:s') . " | ERROR | Execution error in analysis | " . basename($filepath) . "\n";
+        $logEntry = date('Y-m-d H:i:s') . " | ERROR | Claude execution error in analysis | " . basename($filepath) . "\n";
         file_put_contents($logsDir . '/jira_errors.log', $logEntry, FILE_APPEND);
         
         return false;
