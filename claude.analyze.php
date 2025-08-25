@@ -54,7 +54,14 @@ function processWebhookFiles() {
                     // Move processed file to processed directory
                     moveToProcessed($file, $processedDir);
                 } else {
-                    echo "  ✗ Analysis failed: " . $result['error'] . "\n";
+                    // Check if it's a merge commit skip (not an actual error)
+                    if (strpos($result['error'], 'Merge commit') !== false) {
+                        echo "  → Merge commit detected - skipping analysis\n";
+                        // Move to processed directory since it was intentionally skipped
+                        moveToProcessed($file, $processedDir);
+                    } else {
+                        echo "  ✗ Analysis failed: " . $result['error'] . "\n";
+                    }
                 }
             } else {
                 echo "  → Skipping non-push event or invalid data\n";
@@ -84,6 +91,45 @@ function analyzePushEvent($webhookData) {
     $repoName = $payload['repository']['name'] ?? 'repo';
     $beforeCommit = $payload['before'] ?? '';
     $afterCommit = $payload['after'] ?? '';
+    
+    // Check if this is a merge commit
+    $isMergeCommit = false;
+    if (isset($payload['commits']) && is_array($payload['commits'])) {
+        foreach ($payload['commits'] as $commit) {
+            // First check if commit has parents info (not always in webhook)
+            if (isset($commit['parents']) && is_array($commit['parents']) && count($commit['parents']) > 1) {
+                $isMergeCommit = true;
+                echo "  → Detected merge commit (multiple parents)\n";
+                break;
+            }
+            
+            // Fallback to message-based detection
+            $message = $commit['message'] ?? '';
+            // Check for common merge commit patterns
+            if (stripos($message, 'Merge pull request') !== false || 
+                stripos($message, 'Merge branch') !== false ||
+                stripos($message, 'Merge remote-tracking branch') !== false ||
+                preg_match('/^Merge [a-f0-9]{7,40} into [a-f0-9]{7,40}/', $message) || // Git default merge message
+                preg_match('/^Merge commit \'[a-f0-9]{7,40}\'/', $message)) { // Another Git pattern
+                $isMergeCommit = true;
+                echo "  → Detected merge commit (message pattern)\n";
+                break;
+            }
+        }
+    }
+    
+    // Additional check: if commit URL is available, we could fetch commit details from GitHub API
+    // This would give us accurate parent count, but requires API call
+    // For now, we'll rely on message patterns
+    
+    // Skip merge commits
+    if ($isMergeCommit) {
+        echo "  → Skipping merge commit\n";
+        return [
+            'success' => false,
+            'error' => 'Merge commit - skipping analysis'
+        ];
+    }
     
     // Prepare commit information
     $commitInfo = [];
