@@ -412,6 +412,33 @@ function processAnalysisFile($filepath) {
         return false;
     }
     
+    // Check for execution errors in the analysis
+    $fileContent = file_get_contents($filepath);
+    if (stripos($fileContent, 'Execution error') !== false) {
+        echo "  ❌ EXECUTION ERROR DETECTED in analysis file!\n";
+        echo "  ⚠️  Analysis contains execution errors - skipping Jira posting\n";
+        echo "  📝 Please check the analysis file for errors:\n";
+        echo "     " . basename($filepath) . "\n";
+        
+        // Move to error directory instead of processed
+        global $logsDir;
+        $errorDir = dirname($filepath) . '/../error_analysis';
+        if (!is_dir($errorDir)) {
+            mkdir($errorDir, 0777, true);
+        }
+        
+        $errorFile = $errorDir . '/' . basename($filepath);
+        if (rename($filepath, $errorFile)) {
+            echo "  📁 Moved to error directory for review\n";
+        }
+        
+        // Log the error
+        $logEntry = date('Y-m-d H:i:s') . " | ERROR | Execution error in analysis | " . basename($filepath) . "\n";
+        file_put_contents($logsDir . '/jira_errors.log', $logEntry, FILE_APPEND);
+        
+        return false;
+    }
+    
     echo "  Branch: {$analysisData['branch']}\n";
     
     // Try to extract Jira ticket ID from commit messages first

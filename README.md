@@ -20,11 +20,13 @@ webhookTest/
 ├── claude.analyze.php       # Claude AI 분석 스크립트
 ├── jira.hook.php           # Jira 통합 스크립트 (PHP)
 ├── jira_integration.sh     # Jira 통합 스크립트 (Shell)
+├── common.lib.php          # 공통 라이브러리
 ├── .env                    # 환경 설정 파일
 ├── pending_webhooks/       # 처리 대기 중인 웹훅 데이터
 ├── pending_analysis/       # 처리 대기 중인 분석 파일
 ├── processed_webhooks/     # 처리 완료된 웹훅 데이터
 ├── processed_jira/         # 처리 완료된 분석 파일
+├── error_analysis/         # 오류가 포함된 분석 파일
 └── logs/                   # 로그 파일들
 ```
 
@@ -204,6 +206,11 @@ tail -f logs/cron_jira.log
    # 네트워크 연결 테스트
    curl -u "email:token" https://your-domain.atlassian.net/rest/api/2/myself
    ```
+
+4. **"Execution error" 감지**
+   - Claude 분석 중 오류 발생 시 `error_analysis/` 디렉토리로 이동
+   - Jira로 발송되지 않고 개발자 검토 필요
+   - 로그 확인: `tail -f logs/jira_errors.log`
 
 ### 디버깅 모드
 

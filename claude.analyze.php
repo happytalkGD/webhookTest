@@ -132,12 +132,8 @@ function analyzePushEvent($webhookData) {
     }
     
     $prompt .= "\n=== Git 분석 작업 ===\n";
-    $prompt .= "source 폴더로 이동하여 다음 git 명령을 실행하고 분석해주세요:\n";
-    $prompt .= "1. cd ./source/{$repoName}\n";
-    $prompt .= "2. git diff " . substr($beforeCommit, 0, 7) . ".." . substr($afterCommit, 0, 7) . "\n";
-    $prompt .= "3. git log --oneline " . substr($beforeCommit, 0, 7) . ".." . substr($afterCommit, 0, 7) . "\n";
-    $prompt .= "4. 변경된 파일들의 주요 코드 변경사항을 분석해주세요.\n";
-    
+    $prompt .= "source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:\n";
+    $prompt .= "source >  cd ./source/{$repoName}\n";
     $prompt .= "\n=== 요약 형식 ===\n";
     $prompt .= "다음 형식으로 요약해주세요:\n";
     $prompt .= "📌 **주요 변경사항**: (1-2줄로 핵심 변경 내용)\n";

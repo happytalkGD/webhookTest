@@ -324,6 +324,7 @@ function getDirectoryPaths() {
         'pending_analysis' => $baseDir . '/pending_analysis',
         'processed_webhooks' => $baseDir . '/processed_webhooks',
         'processed_jira' => $baseDir . '/processed_jira',
+        'error_analysis' => $baseDir . '/error_analysis',
     ];
 }
 
@@ -347,7 +348,8 @@ function initializeEnvironment($scriptName) {
         $dirs['pending_webhooks'],
         $dirs['pending_analysis'],
         $dirs['processed_webhooks'],
-        $dirs['processed_jira']
+        $dirs['processed_jira'],
+        $dirs['error_analysis']
     ]);
     
     return $dirs;
