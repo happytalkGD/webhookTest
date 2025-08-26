@@ -208,10 +208,7 @@ function markdownToJira($text) {
  */
 function createJiraComment($analysisData) {
     // Build comment in Markdown first
-    $markdown = "깃헙 Push 분석 리포트\n\n";
-    
-    $markdown .= "({$analysisData['repository']}) / {$analysisData['branch']} / {$analysisData['pusher']} / ({$analysisData['generated']})\n\n";
-    
+    $markdown = "{$analysisData['repository']}:{$analysisData['branch']} / {$analysisData['pusher']} {$analysisData['generated']}\n\n";
     $markdown .= "---\n\n";
     
     // Use full analysis if available
@@ -239,9 +236,6 @@ function createJiraComment($analysisData) {
             $markdown .= "{$analysisData['review_points']}\n\n";
         }
     }
-    
-    $markdown .= "---\n";
-    $markdown .= "_This comment was automatically generated from GitHub push analysis_";
     
     // Convert Markdown to Jira format
     return markdownToJira($markdown);
