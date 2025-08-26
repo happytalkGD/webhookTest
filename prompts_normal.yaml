@@ -1,0 +1,117 @@
+# Normal Version - Prompt Template for Regular Commit Analysis
+
+system_prompt: |
+  You are a Git commit analyzer. Analyze the provided Git repository changes 
+  and provide a detailed summary in Korean. You can fetch and analyze GitHub 
+  repository changes using the compare URL provided.
+
+user_prompt: |
+  Please analyze the following Git Push event changes and provide a detailed summary in Korean (한국어로 작성해주세요).
+  
+  === Basic Information ===
+  Repository: {repository}
+  Branch: {branch}
+  Author: {author}
+  Commit Range: {before_commit} → {after_commit}
+  
+  === Commit History ===
+  Showing {shown} out of {total} total commits
+  
+  {commits_detail}
+  
+  === Git Analysis Task ===
+  GitHub Compare API: {url}
+  
+  Call the API to fetch actual code changes (files, patches, stats) and analyze from the following perspectives:
+  - Purpose and role of modified files
+  - Code change consistency and quality
+  - Inter-module dependency changes
+  - Key logic modifications
+
+  If API call fails, execute the following command to analyze the changes:
+  - Navigate to project source folder and analyze changes with git:
+  - Location: cd ./source/{repo_name}
+    
+  === Summary Format ===
+  Please summarize in the following format (Korean language required):
+  
+  📌 **주요 변경사항** (Key Changes)
+  📁 **영향받는 모듈** (Affected Modules)
+  🎯 **변경 목적** (Change Purpose)
+  🔍 **기술적 세부사항** (Technical Details)
+  
+  Please keep the document length between 30-100 lines.
+  Maintain balance - not too short or too long.
+  
+  Only write about actual work done, do not write additional suggestions or improvements.
+  
+  Important: Provide accurate and specific analysis based on provided information and commit messages.
+  All analysis content must be written in Korean.
+  
+  Analysis Depth: Don't just list items, but understand and describe the intent and impact of changes.
+
+# Alternative Version - When Compare URL is not available
+user_prompt_no_url: |
+  Please analyze the following Git Push event changes and provide a detailed summary in Korean (한국어로 작성해주세요).
+  
+  === Basic Information ===
+  Repository: {repository}
+  Branch: {branch}
+  Author: {author}
+  Commit Range: {before_commit} → {after_commit}
+  
+  === Commit History ===
+  Showing {shown} out of {total} total commits
+  
+  {commits_detail}
+  
+  === Git Analysis Task ===
+  Navigate to source folder and analyze changes with git:
+  source >  cd ./source/{repo_name}
+  
+  === Summary Format ===
+  Please summarize in the following format (Korean language required):
+  
+  📌 **주요 변경사항** (Key Changes)
+  📁 **영향받는 모듈** (Affected Modules)
+  🎯 **변경 목적** (Change Purpose)
+  🔍 **기술적 세부사항** (Technical Details)
+  
+  Please keep the document length between 30-100 lines.
+  Maintain balance - not too short or too long.
+  
+  Only write about actual work done, do not write additional suggestions or improvements.
+  
+  Important: Provide accurate and specific analysis based on provided information and commit messages.
+  All analysis content must be written in Korean.
+  
+  Analysis Depth: Don't just list items, but understand and describe the intent and impact of changes.
+
+# Commit detail template (content for commits_detail variable)
+commit_template: |
+  {idx}. [{commit_id}] {message}
+     Author: {author}
+     Changes: {added} added, {modified} modified, {removed} removed files
+     Files: {files}
+
+# Variable descriptions
+variables:
+  repository: "Full repository name (e.g. owner/repo)"
+  branch: "Branch name"
+  author: "User who pushed"
+  before_commit: "Previous commit hash (7 chars)"
+  after_commit: "After commit hash (7 chars)"
+  total: "Total number of commits"
+  shown: "Number of commits to display (max 10)"
+  commits_detail: "Commit details (repeat commit_template)"
+  url: "GitHub Compare API URL"
+  repo_name: "Repository name (excluding owner)"
+  
+  # Variables per commit
+  idx: "Commit sequence number"
+  commit_id: "Commit hash (7 chars)"
+  message: "Commit message"
+  added: "Number of added files"
+  modified: "Number of modified files"
+  removed: "Number of removed files"
+  files: "List of changed files"

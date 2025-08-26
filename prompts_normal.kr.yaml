@@ -1,0 +1,115 @@
+# Normal Version - 일반 커밋 분석용 프롬프트 템플릿
+
+system_prompt: |
+  You are a Git commit analyzer. Analyze the provided Git repository changes 
+  and provide a detailed summary in Korean. You can fetch and analyze GitHub 
+  repository changes using the compare URL provided.
+
+user_prompt: |
+  다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.
+  
+  === 기본 정보 ===
+  저장소: {repository}
+  브랜치: {branch}
+  작성자: {author}
+  커밋 범위: {before_commit} → {after_commit}
+  
+  === 커밋 내역 ===
+  총 {total}개 커밋 중 최근 {shown}개만 표시
+  
+  {commits_detail}
+  
+  === Git 분석 작업 ===
+  GitHub Compare API: {url}
+  
+  API를 호출하여 실제 코드 변경사항(files, patches, stats)을 가져온 후 다음 관점에서 분석해주세요:
+  - 변경된 파일들의 목적과 역할
+  - 코드 변경의 일관성과 품질
+  - 모듈 간 의존성 변화
+  - 주요 로직 변경사항
+
+  만약 API 호출이 실패하면, 다음 명령어를 실행하여 변경된 내용을 분석해주세요:
+  - 프로젝트 source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:
+  - 위치 : cd ./source/{repo_name}
+    
+  === 요약 형식 ===
+  다음 형식으로 요약해주세요:
+  
+  📌 **주요 변경사항**
+  📁 **영향받는 모듈**
+  🎯 **변경 목적**
+  🔍 **기술적 세부사항**
+  
+  문서 길이는 30-100 Line 사이로 작성해주세요.
+  너무 짧거나 길지 않게 균형을 맞춰주세요.
+  
+  실제 작업된 내용만 작성하고, 추가 제안이나 개선 사항은 작성하지 마세요.
+  
+  중요: 제공된 정보와 커밋 메시지를 기반으로 정확하고 구체적인 분석을 제공해주세요.
+  
+  분석 깊이: 단순 나열이 아닌 변경의 의도와 영향을 파악하여 작성해주세요.
+
+# 대체 버전 - Compare URL이 없는 경우
+user_prompt_no_url: |
+  다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.
+  
+  === 기본 정보 ===
+  저장소: {repository}
+  브랜치: {branch}
+  작성자: {author}
+  커밋 범위: {before_commit} → {after_commit}
+  
+  === 커밋 내역 ===
+  총 {total}개 커밋 중 최근 {shown}개만 표시
+  
+  {commits_detail}
+  
+  === Git 분석 작업 ===
+  source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:
+  source >  cd ./source/{repo_name}
+  
+  === 요약 형식 ===
+  다음 형식으로 요약해주세요:
+  
+  📌 **주요 변경사항**
+  📁 **영향받는 모듈**
+  🎯 **변경 목적**
+  🔍 **기술적 세부사항**
+  
+  문서 길이는 30-100 Line 사이로 작성해주세요.
+  너무 짧거나 길지 않게 균형을 맞춰주세요.
+  
+  실제 작업된 내용만 작성하고, 추가 제안이나 개선 사항은 작성하지 마세요.
+  
+  중요: 제공된 정보와 커밋 메시지를 기반으로 정확하고 구체적인 분석을 제공해주세요.
+  
+  분석 깊이: 단순 나열이 아닌 변경의 의도와 영향을 파악하여 작성해주세요.
+
+# 커밋 상세 정보 템플릿 (commits_detail 변수에 들어갈 내용)
+commit_template: |
+  {idx}. [{commit_id}] {message}
+     작성자: {author}
+     변경: 추가 {added}개, 수정 {modified}개, 삭제 {removed}개 파일
+     파일: {files}
+
+# 변수 설명
+variables:
+  repository: "전체 저장소 이름 (예: owner/repo)"
+  branch: "브랜치 이름"
+  author: "푸시한 사용자"
+  before_commit: "이전 커밋 해시 (7자)"
+  after_commit: "이후 커밋 해시 (7자)"
+  total: "전체 커밋 수"
+  shown: "표시할 커밋 수 (최대 10개)"
+  commits_detail: "커밋 상세 정보 (commit_template 반복)"
+  url: "GitHub Compare API URL"
+  repo_name: "저장소 이름 (owner 제외)"
+  
+  # 각 커밋별 변수
+  idx: "커밋 순서 번호"
+  commit_id: "커밋 해시 (7자)"
+  message: "커밋 메시지"
+  added: "추가된 파일 수"
+  modified: "수정된 파일 수"
+  removed: "삭제된 파일 수"
+  files: "변경된 파일 목록"

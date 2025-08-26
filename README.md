@@ -249,11 +249,105 @@ claude.analyze.php는 이제 GitHub Compare API를 직접 활용하여 더 정�
    - 실시간 GitHub 데이터 활용
    - 더 정확한 코드 변경 의도 파악
 
+### 프롬프트 템플릿 시스템
+
+claude.analyze.php는 JSON 또는 YAML 기반 템플릿 시스템을 사용하여 프롬프트를 관리합니다:
+
+#### 지원 형식 및 파일 위치
+
+템플릿은 JSON 또는 YAML 형식으로 제공할 수 있습니다:
+- **JSON 형식**: `prompt_template.json` (폴백 옵션)
+- **YAML 형식**: `prompts_normal.yaml`, `prompts_conflict.yaml`, `prompts_simplified.yaml`
+- **파일 위치**: 프로젝트 루트 디렉토리 (`/webhookTest/`)
+
+> **참고**: YAML 파일이 있으면 JSON보다 우선적으로 사용됩니다. 한국어 버전은 `.kr.yaml` 확장자를 사용합니다.
+
+#### 템플릿 파일 구조
+
+##### JSON 형식 (prompt_template.json)
+1. **기본 프롬프트 섹션**
+   - `system_prompt`: Claude AI 시스템 프롬프트
+   - `main_prompt`: 메인 프롬프트 구조
+   - `simplified_prompt`: 큰 커밋용 간소화 프롬프트
+   - `display_format`: 시각적 표시용 배열 형식
+
+##### YAML 형식 (prompts_*.yaml)
+1. **기본 프롬프트 섹션**
+   - `system_prompt`: Claude AI 시스템 프롬프트 (JSON의 system_prompt와 동일)
+   - `user_prompt`: 사용자 프롬프트 (JSON의 main_prompt에 해당)
+   - `user_prompt_no_url`: URL 없을 때 대체 프롬프트
+   - `commit_template`: 커밋 상세 템플릿
+   - `variables`: 변수 설명 섹션
+
+2. **분석 프로파일**
+   - `default`: 기본 분석
+   - `detailed`: 상세 코드 리뷰
+   - `security`: 보안 중점 분석
+   - `performance`: 성능 영향 분석
+   - `english`: 영어 분석
+
+3. **설정 및 제약**
+   - `max_commits_detail`: 상세 표시할 최대 커밋 수
+   - `max_prompt_length`: 프롬프트 최대 길이
+   - `truncate_message_at`: 커밋 메시지 최대 길이
+
+#### 템플릿 변수
+
+| 변수 | 설명 |
+|------|------|
+| `{repository}` | 전체 저장소 이름 (owner/repo) |
+| `{branch}` | 브랜치 이름 |
+| `{author}` | 커밋 작성자 |
+| `{before_commit}` | 이전 커밋 해시 (7자) |
+| `{after_commit}` | 이후 커밋 해시 (7자) |
+| `{commit_id}` | 개별 커밋 ID |
+| `{message}` | 커밋 메시지 |
+| `{url}` | GitHub Compare URL |
+
+### 프롬프트 미리보기 도구
+
+`preview_prompt.php`를 사용하여 템플릿 수정 후 실제 생성될 프롬프트를 미리 확인할 수 있습니다:
+
+```bash
+# 일반 프롬프트 미리보기
+php preview_prompt.php normal
+
+# 충돌 있는 병합 커밋 프롬프트
+php preview_prompt.php conflict
+
+# 간소화된 프롬프트 (큰 커밋용)
+php preview_prompt.php simplified
+```
+
+미리보기 도구는 다음 정보를 제공합니다:
+- 실제 생성될 프롬프트 전체 내용
+- 프롬프트 통계 (줄 수, 문자 수, 바이트)
+- 사용된 템플릿 변수 목록
+
+### 프롬프트 로깅
+
+모든 Claude AI 프롬프트는 디버깅을 위해 자동으로 로깅됩니다:
+
+- 위치: `logs/claude_prompts/`
+- 파일명: `YYYY-MM-DD_HH-ii-ss_저장소명_prompt.txt`
+- 내용: System Prompt, User Prompt, 메타데이터
+
+```bash
+# 최근 프롬프트 로그 확인
+ls -lt logs/claude_prompts/ | head -5
+
+# 특정 프롬프트 내용 확인
+cat logs/claude_prompts/2024-01-01_12-00-00_example_repo_prompt.txt
+```
+
 ### 테스트 방법
 
 ```bash
 # Compare URL 프롬프트 테스트
 php test_compare_url.php
+
+# 프롬프트 미리보기
+php preview_prompt.php normal
 
 # 실제 웹훅 데이터로 분석 실행
 php claude.analyze.php

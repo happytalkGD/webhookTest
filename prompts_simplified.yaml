@@ -1,0 +1,75 @@
+# Simplified Version - 대량 커밋 또는 간소화 분석용 프롬프트 템플릿
+
+system_prompt: |
+  You are a Git commit analyzer. Analyze the provided Git repository changes 
+  and provide a concise summary in Korean. You can fetch and analyze GitHub 
+  repository changes using the compare URL provided.
+
+user_prompt: |
+  다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.
+  
+  === 기본 정보 ===
+  저장소: {repository}
+  브랜치: {branch}
+  커밋 수: {commit_count}개
+  커밋 범위: {before_commit} → {after_commit}
+  
+  GitHub Compare URL: {url}
+  
+  위 URL을 사용하여 변경사항을 직접 확인하고 다음 형식으로 요약해주세요:
+  
+  📌 **주요 변경사항** (핵심 변경 내용)
+  📁 **영향받는 모듈** (주요 파일/디렉토리)
+  🎯 **변경 목적** (추측)
+  
+  50줄 이내로 매우 간결하게 작성해주세요.
+
+# 대체 버전 - Compare URL이 없는 경우
+user_prompt_no_url: |
+  다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.
+  
+  === 기본 정보 ===
+  저장소: {repository}
+  브랜치: {branch}
+  커밋 수: {commit_count}개
+  커밋 범위: {before_commit} → {after_commit}
+  
+  === 주요 커밋 ===
+  {main_commits}
+  
+  source 폴더로 이동하여 git 으로 변경사항을 확인해주세요:
+  source >  cd ./source/{repo_name}
+  
+  다음 형식으로 요약해주세요:
+  
+  📌 **주요 변경사항** (핵심 변경 내용)
+  📁 **영향받는 모듈** (주요 파일/디렉토리)
+  🎯 **변경 목적** (추측)
+  
+  50줄 이내로 매우 간결하게 작성해주세요.
+
+# 주요 커밋만 표시 (main_commits 변수에 들어갈 내용)
+main_commit_template: |
+  - [{commit_id}] {message} (파일 {total_files}개 변경)
+
+# 변수 설명
+variables:
+  repository: "전체 저장소 이름 (예: owner/repo)"
+  branch: "브랜치 이름"
+  commit_count: "전체 커밋 수"
+  before_commit: "이전 커밋 해시 (7자)"
+  after_commit: "이후 커밋 해시 (7자)"
+  url: "GitHub Compare API URL"
+  repo_name: "저장소 이름 (owner 제외)"
+  main_commits: "주요 커밋 목록 (최대 5개)"
+  
+  # 각 커밋별 변수 (간소화)
+  commit_id: "커밋 해시 (7자)"
+  message: "커밋 메시지 (50자 제한)"
+  total_files: "변경된 파일 총 개수"
+
+# 설정
+settings:
+  max_commits_show: 5
+  max_message_length: 50
+  max_output_lines: 50

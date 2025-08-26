@@ -1,0 +1,282 @@
+system_prompt: |
+  You are a Git commit analyzer. Analyze the provided Git repository changes 
+  and provide a detailed summary in Korean. You can fetch and analyze GitHub 
+  repository changes using the compare URL provided.
+
+main_prompt:
+  intro: |
+    다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.
+
+  merge_conflict_warning: |
+    ⚠️ **주의: 이것은 충돌이 있었던 병합 커밋입니다**
+    충돌 해결 부분에 특별히 주목하여 분석해주세요.
+
+  basic_info:
+    header: "=== 기본 정보 ==="
+    repository: "저장소: {repository}"
+    branch: "브랜치: {branch}"
+    author: "작성자: {author}"
+    commit_range: "커밋 범위: {before_commit} → {after_commit}"
+
+  commit_details:
+    header: "=== 커밋 내역 ==="
+    total_commits_note: "총 {total}개 커밋 중 최근 {shown}개만 표시"
+    commit_format: |
+      {idx}. [{commit_id}] {message}
+         작성자: {author}
+         변경: 추가 {added}개, 수정 {modified}개, 삭제 {removed}개 파일
+    files_many: "   파일: 총 {count}개 파일 변경됨"
+    files_list: "   파일: {files_list}"
+    files_more: " 외 {count}개"
+
+  analysis_task:
+    header: |
+      
+      === Git 분석 작업 ===
+    with_compare_url: |
+      GitHub Compare API: {url}
+      
+      API를 호출하여 실제 코드 변경사항(files, patches, stats)을 
+      가져온 후, 다음 관점에서 분석해주세요:
+      - 변경된 파일들의 목적과 역할
+      - 코드 변경의 일관성과 품질
+      - 모듈 간 의존성 변화
+      - 주요 로직 변경사항
+    without_compare_url: |
+      source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:
+      source >  cd ./source/{repo_name}
+
+  summary_format:
+    header: |
+      
+      === 요약 형식 ===
+      다음 형식으로 요약해주세요:
+    main_changes: "📌 **주요 변경사항**"
+    affected_modules: "📁 **영향받는 모듈**"
+    change_purpose: "🎯 **변경 목적**"
+    technical_details: "🔍 **기술적 세부사항**"
+    conflict_resolution: "⚠️ **충돌 해결 내역**: (충돌이 발생했던 파일과 해결 방법)"
+    conflict_check_items: |
+      
+      충돌 분석 시 다음 사항을 확인해주세요:
+      - 어떤 파일에서 충돌이 발생했는지
+      - 충돌이 어떻게 해결되었는지 (어느 브랜치의 코드를 선택했는지)
+      - 충돌 해결 과정에서 추가/수정된 코드가 있는지
+
+  constraints:
+    length: |
+      
+      문서 길이는 30-100 Line 사이로 작성해주세요. 
+      너무 짧거나 길지 않게 균형을 맞춰주세요.
+    content_only: |
+      
+      실제 작업된 내용만 작성하고, 추가 제안이나 개선 사항은 작성하지 마세요.
+    important_note: |
+      
+      중요: 제공된 정보와 커밋 메시지를 기반으로 정확하고 구체적인 분석을 제공해주세요.
+    analysis_depth: |
+      
+      분석 깊이: 단순 나열이 아닌 변경의 의도와 영향을 파악하여 작성해주세요.
+
+  simplified_prompt:
+    intro: |
+      다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.
+    basic_info: |
+      === 기본 정보 ===
+      저장소: {repository}
+      브랜치: {branch}
+      커밋 수: {commit_count}개
+      커밋 범위: {before_commit} → {after_commit}
+    compare_url: |
+      GitHub Compare URL: {url}
+      
+      위 URL을 사용하여 변경사항을 직접 확인하고 다음 형식으로 요약해주세요:
+    summary_format: |
+      📌 **주요 변경사항**: (핵심 변경 내용)
+      📁 **영향받는 모듈**: (주요 파일/디렉토리)
+      🎯 **변경 목적**: (추측)
+    constraint: |
+      
+      50줄 이내로 매우 간결하게 작성해주세요.
+
+  display_format:
+    intro:
+      - "다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요."
+      - ""
+      - ""
+    
+    merge_conflict_warning:
+      - "⚠️ **주의: 이것은 충돌이 있었던 병합 커밋입니다**"
+      - "충돌 해결 부분에 특별히 주목하여 분석해주세요."
+      - ""
+      - ""
+    
+    basic_info:
+      - "=== 기본 정보 ==="
+      - "저장소: {repository}"
+      - "브랜치: {branch}"
+      - "작성자: {author}"
+      - "커밋 범위: {before_commit} → {after_commit}"
+      - ""
+      - ""
+    
+    commit_header:
+      - "=== 커밋 내역 ==="
+      - "총 {total}개 커밋 중 최근 {shown}개만 표시"
+      - ""
+      - ""
+    
+    commit_item:
+      - "{idx}. [{commit_id}] {message}"
+      - "   작성자: {author}"
+      - "   변경: 추가 {added}개, 수정 {modified}개, 삭제 {removed}개 파일"
+      - "   파일: {files}"
+    
+    analysis_with_url:
+      - ""
+      - "=== Git 분석 작업 ==="
+      - "GitHub Compare API: {url}"
+      - ""
+      - "API를 호출하여 실제 코드 변경사항을 가져온 후 분석해주세요."
+      - "다음 관점에서 중점적으로 확인:"
+      - "- 변경된 파일들의 목적과 역할"
+      - "- 코드 변경의 일관성과 품질"
+      - "- 모듈 간 의존성 변화"
+      - "- 주요 로직 변경사항"
+      - ""
+    
+    analysis_without_url:
+      - ""
+      - "=== Git 분석 작업 ==="
+      - "source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:"
+      - "source >  cd ./source/{repo_name}"
+      - ""
+    
+    summary_format:
+      - ""
+      - "=== 요약 형식 ==="
+      - "다음 형식으로 요약해주세요:"
+      - "📌 **주요 변경사항**"
+      - "📁 **영향받는 모듈**"
+      - "🎯 **변경 목적**"
+      - "🔍 **기술적 세부사항**"
+    
+    conflict_analysis:
+      - "⚠️ **충돌 해결 내역**: (충돌이 발생했던 파일과 해결 방법)"
+      - ""
+      - "충돌 분석 시 다음 사항을 확인해주세요:"
+      - "- 어떤 파일에서 충돌이 발생했는지"
+      - "- 충돌이 어떻게 해결되었는지 (어느 브랜치의 코드를 선택했는지)"
+      - "- 충돌 해결 과정에서 추가/수정된 코드가 있는지"
+      - ""
+    
+    constraints:
+      - ""
+      - "문서 길이는 30-100 Line 사이로 작성해주세요."
+      - ""
+      - "실제 작업된 내용만 작성하고, 추가 제안이나 개선 사항은 작성하지 마세요."
+      - ""
+      - "제공된 정보와 커밋 메시지를 기반으로 정확하고 구체적인 분석을 제공해주세요."
+
+settings:
+  max_commits_detail: 10
+  max_prompt_length: 10000
+  max_files_per_commit: 10
+  max_files_to_list: 5
+  truncate_message_at: 200
+  truncate_commit_id_to: 7
+
+profiles:
+  default:
+    name: "기본 분석"
+    description: "일반적인 커밋 분석용"
+    language: "korean"
+    output_length: 100
+    focus:
+      - "변경사항"
+      - "영향받는 모듈"
+      - "변경 목적"
+  
+  detailed:
+    name: "상세 분석"
+    description: "코드 리뷰 및 상세 분석용"
+    language: "korean"
+    output_length: 200
+    focus:
+      - "변경사항"
+      - "영향받는 모듈"
+      - "변경 목적"
+      - "코드 품질"
+      - "잠재적 문제점"
+    additional_prompts:
+      - "코드 변경의 품질과 일관성을 평가해주세요."
+      - "잠재적인 버그나 성능 문제가 있는지 확인해주세요."
+  
+  security:
+    name: "보안 분석"
+    description: "보안 관련 변경사항 중점 분석"
+    language: "korean"
+    output_length: 150
+    focus:
+      - "보안 영향"
+      - "취약점"
+      - "권한 변경"
+      - "민감 데이터"
+    additional_prompts:
+      - "보안상 위험이 될 수 있는 변경사항이 있는지 확인해주세요."
+      - "비밀번호, API 키, 토큰 등 민감한 정보가 노출되었는지 검사해주세요."
+      - "권한 관련 변경사항이 있는지 확인해주세요."
+  
+  performance:
+    name: "성능 분석"
+    description: "성능 영향 중점 분석"
+    language: "korean"
+    output_length: 100
+    focus:
+      - "성능 영향"
+      - "최적화"
+      - "리소스 사용"
+      - "알고리즘 효율성"
+    additional_prompts:
+      - "성능에 영향을 줄 수 있는 변경사항을 식별해주세요."
+      - "비효율적인 알고리즘이나 리소스 사용이 있는지 확인해주세요."
+  
+  english:
+    name: "English Analysis"
+    description: "Analysis in English"
+    language: "english"
+    output_length: 100
+    focus:
+      - "changes"
+      - "affected modules"
+      - "purpose"
+    system_prompt_override: |
+      You are a Git commit analyzer. Analyze the provided Git repository changes 
+      and provide a detailed summary in English.
+    intro_override: |
+      Please analyze the following Git Push event changes and provide a summary in English.
+    summary_format_override:
+      main_changes: "📌 **Main Changes**: (1-2 lines of core changes)"
+      affected_modules: "📁 **Affected Modules**: (main files/directories)"
+      change_purpose: "🎯 **Change Purpose**: (based on commit messages and code changes)"
+
+variables_documentation:
+  "{repository}": "전체 저장소 이름 (owner/repo)"
+  "{branch}": "브랜치 이름"
+  "{author}": "커밋 작성자"
+  "{before_commit}": "이전 커밋 해시 (7자)"
+  "{after_commit}": "이후 커밋 해시 (7자)"
+  "{total}": "전체 커밋 수"
+  "{shown}": "표시된 커밋 수"
+  "{idx}": "커밋 인덱스"
+  "{commit_id}": "커밋 ID (7자)"
+  "{message}": "커밋 메시지"
+  "{added}": "추가된 파일 수"
+  "{modified}": "수정된 파일 수"
+  "{removed}": "삭제된 파일 수"
+  "{files}": "파일 목록"
+  "{files_list}": "쉼표로 구분된 파일 목록"
+  "{count}": "일반적인 개수"
+  "{url}": "GitHub compare URL"
+  "{repo_name}": "저장소 이름 (owner 제외)"
+  "{commit_count}": "전체 커밋 개수"

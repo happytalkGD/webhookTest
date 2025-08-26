@@ -7,6 +7,15 @@
 // Include common library
 require_once dirname(__FILE__) . '/common.lib.php';
 
+// Include YAML parser if PHP YAML extension not available
+if (!function_exists('yaml_parse_file')) {
+    if (file_exists(dirname(__FILE__) . '/yaml_parser_v2.php')) {
+        require_once dirname(__FILE__) . '/yaml_parser_v2.php';
+    } else {
+        require_once dirname(__FILE__) . '/yaml_parser.php';
+    }
+}
+
 // Initialize environment
 $dirs = initializeEnvironment('claude_analyze');
 
@@ -59,6 +68,10 @@ function processWebhookFiles() {
                         echo "  → Merge commit detected - skipping analysis\n";
                         // Move to processed directory since it was intentionally skipped
                         moveToProcessed($file, $processedDir);
+                    } else if (strpos($result['error'], 'No Jira ticket ID found') !== false) {
+                        echo "  → No Jira ticket - skipping analysis\n";
+                        // Move to processed directory since it was intentionally skipped
+                        moveToProcessed($file, $processedDir);
                     } else {
                         echo "  ✗ Analysis failed: " . $result['error'] . "\n";
                     }
@@ -79,6 +92,326 @@ function processWebhookFiles() {
 }
 
 /**
+ * Load YAML prompt template based on type
+ */
+function loadYamlPromptTemplate($type = 'normal') {
+    $validTypes = ['normal', 'conflict', 'simplified'];
+    if (!in_array($type, $validTypes)) {
+        $type = 'normal';
+    }
+    
+    $templateFile = dirname(__FILE__) . '/prompts_' . $type . '.yaml';
+    if (!file_exists($templateFile)) {
+        // Fallback to JSON template if YAML not found
+        return loadJsonPromptTemplate();
+    }
+    
+    // Check if yaml_parse_file function exists
+    if (!function_exists('yaml_parse_file')) {
+        // Try to use Symfony YAML if available
+        if (file_exists(dirname(__FILE__) . '/vendor/autoload.php')) {
+            require_once dirname(__FILE__) . '/vendor/autoload.php';
+            if (class_exists('Symfony\Component\Yaml\Yaml')) {
+                $yamlContent = file_get_contents($templateFile);
+                return \Symfony\Component\Yaml\Yaml::parse($yamlContent);
+            }
+        }
+        // Fallback to JSON if YAML parser not available
+        echo "  ⚠️ YAML parser not available, using JSON template\n";
+        return loadJsonPromptTemplate();
+    }
+    
+    $template = yaml_parse_file($templateFile);
+    if ($template === false) {
+        throw new Exception("Invalid YAML in template file: " . $templateFile);
+    }
+    
+    return $template;
+}
+
+/**
+ * Load JSON prompt template (fallback)
+ */
+function loadJsonPromptTemplate() {
+    $templateFile = dirname(__FILE__) . '/prompt_template.json';
+    if (!file_exists($templateFile)) {
+        throw new Exception("Prompt template file not found");
+    }
+    
+    $templateJson = file_get_contents($templateFile);
+    $template = json_decode($templateJson, true);
+    
+    if ($template === null) {
+        throw new Exception("Invalid JSON in prompt template file");
+    }
+    
+    return $template;
+}
+
+/**
+ * Determine template type based on commit analysis
+ */
+function determineTemplateType($webhookData) {
+    $payload = $webhookData['payload'];
+    $totalCommits = count($payload['commits'] ?? []);
+    
+    // Check for merge commits with conflicts
+    if (isset($payload['commits']) && is_array($payload['commits'])) {
+        foreach ($payload['commits'] as $commit) {
+            // Check for merge commit
+            if (isset($commit['parents']) && is_array($commit['parents']) && count($commit['parents']) > 1) {
+                // Check for conflict indicators
+                $message = $commit['message'] ?? '';
+                if (stripos($message, 'conflict') !== false || 
+                    stripos($message, 'resolve') !== false || 
+                    stripos($message, 'fixed merge') !== false) {
+                    echo "  → Template type: conflict (merge with conflicts detected)\n";
+                    return 'conflict';
+                }
+            }
+            
+            // Check message patterns for merge
+            $message = $commit['message'] ?? '';
+            if ((stripos($message, 'Merge pull request') !== false || 
+                 stripos($message, 'Merge branch') !== false) &&
+                (stripos($message, 'conflict') !== false || 
+                 stripos($message, 'resolve') !== false)) {
+                echo "  → Template type: conflict (merge conflict pattern detected)\n";
+                return 'conflict';
+            }
+        }
+    }
+    
+    // Use simplified for large commit sets
+    if ($totalCommits > 15) {
+        echo "  → Template type: simplified (large commit set: {$totalCommits} commits)\n";
+        return 'simplified';
+    }
+    
+    // Check prompt size estimate
+    $estimatedSize = $totalCommits * 500; // Rough estimate
+    if ($estimatedSize > 10000) {
+        echo "  → Template type: simplified (estimated size too large)\n";
+        return 'simplified';
+    }
+    
+    echo "  → Template type: normal\n";
+    return 'normal';
+}
+
+/**
+ * Build prompt from YAML template
+ */
+function buildPromptFromYamlTemplate($template, $data, $type = 'normal') {
+    // Select prompt based on URL availability
+    $promptKey = !empty($data['compare_url']) ? 'user_prompt' : 'user_prompt_no_url';
+    $prompt = $template[$promptKey] ?? '';
+    
+    // Build commits detail string
+    $commitsDetail = '';
+    if ($type !== 'simplified') {
+        $commitTemplate = $template['commit_template'] ?? '';
+        $maxCommits = 10;
+        $commitsToShow = array_slice($data['commits'], 0, $maxCommits);
+        
+        foreach ($commitsToShow as $idx => $commit) {
+            $message = $commit['message'];
+            if (strlen($message) > 200) {
+                $message = substr($message, 0, 197) . '...';
+            }
+            
+            $filesList = '';
+            if (!empty($commit['files'])) {
+                $fileCount = count($commit['files']);
+                if ($fileCount > 10) {
+                    $filesList = "총 {$fileCount}개 파일 변경됨";
+                } else {
+                    $filesList = implode(', ', array_slice($commit['files'], 0, 5));
+                    if ($fileCount > 5) {
+                        $filesList .= " 외 " . ($fileCount - 5) . "개";
+                    }
+                }
+            }
+            
+            $commitStr = str_replace(
+                ['{idx}', '{commit_id}', '{message}', '{author}', '{added}', '{modified}', '{removed}', '{files}'],
+                [$idx + 1, substr($commit['id'], 0, 7), $message, $commit['author'], 
+                 $commit['added'], $commit['modified'], $commit['removed'], $filesList],
+                $commitTemplate
+            );
+            
+            // Add merge info for conflict template
+            if ($type === 'conflict' && isset($commit['parents']) && count($commit['parents']) > 1) {
+                $commitStr = str_replace('{merge_info}', '병합 커밋 (부모: ' . count($commit['parents']) . '개)', $commitStr);
+            } else {
+                $commitStr = str_replace('{merge_info}', '', $commitStr);
+            }
+            
+            $commitsDetail .= $commitStr;
+        }
+    } else {
+        // Simplified version - just main commits
+        $mainCommitTemplate = $template['main_commit_template'] ?? '';
+        $maxCommits = 5;
+        $commitsToShow = array_slice($data['commits'], 0, $maxCommits);
+        
+        foreach ($commitsToShow as $commit) {
+            $message = $commit['message'];
+            if (strlen($message) > 50) {
+                $message = substr($message, 0, 47) . '...';
+            }
+            
+            $totalFiles = $commit['added'] + $commit['modified'] + $commit['removed'];
+            
+            $commitsDetail .= str_replace(
+                ['{commit_id}', '{message}', '{total_files}'],
+                [substr($commit['id'], 0, 7), $message, $totalFiles],
+                $mainCommitTemplate
+            );
+        }
+    }
+    
+    // Replace all variables in the prompt
+    $replacements = [
+        '{repository}' => $data['repository'],
+        '{branch}' => $data['branch'],
+        '{author}' => $data['author'],
+        '{before_commit}' => $data['before_commit'],
+        '{after_commit}' => $data['after_commit'],
+        '{total}' => count($data['commits']),
+        '{shown}' => min(count($data['commits']), $type === 'simplified' ? 5 : 10),
+        '{commit_count}' => $data['commit_count'],
+        '{commits_detail}' => trim($commitsDetail),
+        '{main_commits}' => trim($commitsDetail),
+        '{url}' => $data['compare_url'],
+        '{repo_name}' => $data['repo_name']
+    ];
+    
+    foreach ($replacements as $key => $value) {
+        $prompt = str_replace($key, $value, $prompt);
+    }
+    
+    return $prompt;
+}
+
+/**
+ * Build prompt from JSON template (legacy)
+ */
+function buildPromptFromTemplate($template, $data) {
+    $prompt = $template['main_prompt']['intro'];
+    
+    // Add merge conflict warning if applicable
+    if ($data['is_merge_with_conflict']) {
+        $prompt .= $template['main_prompt']['merge_conflict_warning'];
+    }
+    
+    // Basic info section
+    $prompt .= $template['main_prompt']['basic_info']['header'];
+    $prompt .= str_replace('{repository}', $data['repository'], $template['main_prompt']['basic_info']['repository']);
+    $prompt .= str_replace('{branch}', $data['branch'], $template['main_prompt']['basic_info']['branch']);
+    $prompt .= str_replace('{author}', $data['author'], $template['main_prompt']['basic_info']['author']);
+    $prompt .= str_replace(
+        ['{before_commit}', '{after_commit}'],
+        [$data['before_commit'], $data['after_commit']],
+        $template['main_prompt']['basic_info']['commit_range']
+    );
+    
+    // Commit details section
+    $settings = $template['settings'];
+    $maxCommits = $settings['max_commits_detail'];
+    $totalCommits = count($data['commits']);
+    $commitsToShow = $data['commits'];
+    
+    $prompt .= $template['main_prompt']['commit_details']['header'];
+    if ($totalCommits > $maxCommits) {
+        $prompt .= str_replace(
+            ['{total}', '{shown}'],
+            [$totalCommits, $maxCommits],
+            $template['main_prompt']['commit_details']['total_commits_note']
+        );
+        $commitsToShow = array_slice($data['commits'], 0, $maxCommits);
+    }
+    
+    foreach ($commitsToShow as $idx => $commit) {
+        // Truncate long commit messages
+        $message = $commit['message'];
+        if (strlen($message) > $settings['truncate_message_at']) {
+            $message = substr($message, 0, $settings['truncate_message_at'] - 3) . '...';
+        }
+        
+        $prompt .= str_replace(
+            ['{idx}', '{commit_id}', '{message}', '{author}', '{added}', '{modified}', '{removed}'],
+            [$idx + 1, substr($commit['id'], 0, $settings['truncate_commit_id_to']), $message, $commit['author'], $commit['added'], $commit['modified'], $commit['removed']],
+            $template['main_prompt']['commit_details']['commit_format']
+        );
+        
+        // Add file list
+        if (!empty($commit['files'])) {
+            $fileCount = count($commit['files']);
+            if ($fileCount > $settings['max_files_per_commit']) {
+                $prompt .= str_replace('{count}', $fileCount, $template['main_prompt']['commit_details']['files_many']);
+            } else {
+                $filesList = implode(', ', array_slice($commit['files'], 0, $settings['max_files_to_list']));
+                $prompt .= str_replace('{files_list}', $filesList, $template['main_prompt']['commit_details']['files_list']);
+                if ($fileCount > $settings['max_files_to_list']) {
+                    $prompt .= str_replace('{count}', $fileCount - $settings['max_files_to_list'], $template['main_prompt']['commit_details']['files_more']);
+                }
+                $prompt .= "\n";
+            }
+        }
+    }
+    
+    // Analysis task section
+    $prompt .= $template['main_prompt']['analysis_task']['header'];
+    if (!empty($data['compare_url'])) {
+        $prompt .= str_replace('{url}', $data['compare_url'], $template['main_prompt']['analysis_task']['with_compare_url']);
+    } else {
+        $prompt .= str_replace('{repo_name}', $data['repo_name'], $template['main_prompt']['analysis_task']['without_compare_url']);
+    }
+    
+    // Summary format section
+    $prompt .= $template['main_prompt']['summary_format']['header'];
+    $prompt .= $template['main_prompt']['summary_format']['main_changes'];
+    $prompt .= $template['main_prompt']['summary_format']['affected_modules'];
+    $prompt .= $template['main_prompt']['summary_format']['change_purpose'];
+    
+    // Add conflict resolution section if needed
+    if ($data['is_merge_with_conflict']) {
+        $prompt .= $template['main_prompt']['summary_format']['conflict_resolution'];
+        $prompt .= $template['main_prompt']['summary_format']['conflict_check_items'];
+    }
+    
+    // Add constraints
+    $prompt .= $template['main_prompt']['constraints']['length'];
+    $prompt .= $template['main_prompt']['constraints']['content_only'];
+    $prompt .= $template['main_prompt']['constraints']['important_note'];
+    
+    return $prompt;
+}
+
+/**
+ * Build simplified prompt from template
+ */
+function buildSimplifiedPromptFromTemplate($template, $data) {
+    $prompt = $template['main_prompt']['simplified_prompt']['intro'];
+    
+    $prompt .= str_replace(
+        ['{repository}', '{branch}', '{commit_count}', '{before_commit}', '{after_commit}'],
+        [$data['repository'], $data['branch'], $data['commit_count'], $data['before_commit'], $data['after_commit']],
+        $template['main_prompt']['simplified_prompt']['basic_info']
+    );
+    
+    if (!empty($data['compare_url'])) {
+        $prompt .= str_replace('{url}', $data['compare_url'], $template['main_prompt']['simplified_prompt']['compare_url']);
+    }
+    
+    $prompt .= $template['main_prompt']['simplified_prompt']['summary_format'];
+    $prompt .= $template['main_prompt']['simplified_prompt']['constraint'];
+    
+    return $prompt;
+}
+
+/**
  * Analyze push event with Claude
  */
 function analyzePushEvent($webhookData) {
@@ -91,6 +424,40 @@ function analyzePushEvent($webhookData) {
     $repoName = $payload['repository']['name'] ?? 'repo';
     $beforeCommit = $payload['before'] ?? '';
     $afterCommit = $payload['after'] ?? '';
+    
+    // Check if any commit or branch has Jira ticket ID
+    $hasJiraTicket = false;
+    
+    // Check branch name first
+    if (extractJiraTicketId($branch)) {
+        $hasJiraTicket = true;
+        echo "  → Found Jira ticket in branch: " . extractJiraTicketId($branch) . "\n";
+    }
+    
+    // Check commit messages if not found in branch
+    if (!$hasJiraTicket && isset($payload['commits']) && is_array($payload['commits'])) {
+        foreach ($payload['commits'] as $commit) {
+            $message = $commit['message'] ?? '';
+            if (extractJiraTicketId($message)) {
+                $hasJiraTicket = true;
+                echo "  → Found Jira ticket in commit: " . extractJiraTicketId($message) . "\n";
+                break;
+            }
+        }
+    }
+    
+    // Skip analysis if no Jira ticket found
+    if (!$hasJiraTicket) {
+        echo "  ⚠️ No Jira ticket ID found - skipping analysis\n";
+        echo "    Branch: {$branch}\n";
+        if (isset($payload['commits'][0])) {
+            echo "    First commit: " . substr($payload['commits'][0]['message'] ?? '', 0, 50) . "...\n";
+        }
+        return [
+            'success' => false,
+            'error' => 'No Jira ticket ID found in branch or commits'
+        ];
+    }
     
     // Check if this is a merge commit
     $isMergeCommit = false;
@@ -170,132 +537,173 @@ function analyzePushEvent($webhookData) {
         }
     }
     
-    // System prompt for Claude
-    $systemPrompt = "You are a Git commit analyzer. Analyze the provided Git repository changes and provide a detailed summary in Korean. You can fetch and analyze GitHub repository changes using the compare URL provided.";
+    // Determine template type
+    $templateType = determineTemplateType($webhookData);
     
-    // Build the prompt
-    $prompt = "다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.\n\n";
-    
-    // Add special note if this is a merge commit with conflicts
-    if ($isMergeCommit && isset($hasConflict) && $hasConflict) {
-        $prompt .= "⚠️ **주의: 이것은 충돌이 있었던 병합 커밋입니다**\n";
-        $prompt .= "충돌 해결 부분에 특별히 주목하여 분석해주세요.\n\n";
-    }
-    
-    $prompt .= "=== 기본 정보 ===\n";
-    $prompt .= "저장소: " . ($payload['repository']['full_name'] ?? 'Unknown') . "\n";
-    $prompt .= "브랜치: " . $branch . "\n";
-    $prompt .= "작성자: " . ($payload['pusher']['name'] ?? 'Unknown') . "\n";
-    $prompt .= "커밋 범위: " . substr($beforeCommit, 0, 7) . " → " . substr($afterCommit, 0, 7) . "\n\n";
-    
-    // Limit commit details to prevent prompt overflow
-    $maxCommits = 10; // Maximum number of commits to show in detail
-    $totalCommits = count($commitInfo);
-    
-    $prompt .= "=== 커밋 내역 ===\n";
-    if ($totalCommits > $maxCommits) {
-        $prompt .= "총 {$totalCommits}개 커밋 중 최근 {$maxCommits}개만 표시\n\n";
-        $commitInfo = array_slice($commitInfo, 0, $maxCommits);
-    }
-    
-    foreach ($commitInfo as $idx => $commit) {
-        // Truncate long commit messages
-        $message = $commit['message'];
-        if (strlen($message) > 200) {
-            $message = substr($message, 0, 197) . '...';
-        }
-        
-        $prompt .= ($idx + 1) . ". [" . substr($commit['id'], 0, 7) . "] " . $message . "\n";
-        $prompt .= "   작성자: " . $commit['author'] . "\n";
-        $prompt .= "   변경: 추가 " . $commit['added'] . "개, 수정 " . $commit['modified'] . "개, 삭제 " . $commit['removed'] . "개 파일\n";
-        
-        // Limit file list to prevent prompt overflow
-        if (!empty($commit['files'])) {
-            $fileCount = count($commit['files']);
-            if ($fileCount > 10) {
-                // For many files, just show summary
-                $prompt .= "   파일: 총 {$fileCount}개 파일 변경됨\n";
-            } else {
-                $prompt .= "   파일: " . implode(', ', array_slice($commit['files'], 0, 5));
-                if ($fileCount > 5) {
-                    $prompt .= " 외 " . ($fileCount - 5) . "개";
-                }
-                $prompt .= "\n";
-            }
+    // Load YAML prompt template
+    try {
+        $template = loadYamlPromptTemplate($templateType);
+    } catch (Exception $e) {
+        echo "  ✗ Failed to load YAML template, trying JSON: " . $e->getMessage() . "\n";
+        try {
+            $template = loadJsonPromptTemplate();
+            $templateType = 'json'; // Mark as JSON fallback
+        } catch (Exception $e2) {
+            echo "  ✗ Failed to load any template: " . $e2->getMessage() . "\n";
+            return [
+                'success' => false,
+                'error' => 'Failed to load prompt template'
+            ];
         }
     }
     
-    // Extract compare URL from webhook payload
+    // System prompt from template
+    $systemPrompt = $template['system_prompt'] ?? 'You are a Git commit analyzer.';
+    
+    // Build compare URL if available
     $compareUrl = $payload['repository']['compare_url'] ?? '';
+    $actualCompareUrl = '';
     if (!empty($compareUrl) && !empty($beforeCommit) && !empty($afterCommit)) {
-        // Build actual compare URL
+        // Convert GitHub web URL to API URL
+        // From: https://github.com/{owner}/{repo}/compare/{base}...{head}
+        // To: https://api.github.com/repos/{owner}/{repo}/compare/{base}...{head}
         $actualCompareUrl = str_replace(
             ['{base}', '{head}'],
             [$beforeCommit, $afterCommit],
             $compareUrl
         );
         
-        $prompt .= "\n=== Git 분석 작업 ===\n";
-        $prompt .= "다음 GitHub Compare API URL을 사용하여 변경사항을 분석해주세요:\n";
-        $prompt .= "Compare URL: " . $actualCompareUrl . "\n";
-        $prompt .= "\n이 URL을 통해 두 커밋 간의 차이점을 직접 확인하고 분석해주세요.\n";
-        $prompt .= "URL에서 다음 정보를 확인할 수 있습니다:\n";
-        $prompt .= "- 변경된 파일 목록 (files)\n";
-        $prompt .= "- 각 파일의 patch (코드 diff)\n";
-        $prompt .= "- 추가/삭제된 줄 수 (additions/deletions)\n";
-        $prompt .= "- 파일 상태 (added/modified/removed)\n";
+        // Convert to API URL if it's a web URL
+        if (strpos($actualCompareUrl, 'https://github.com/') === 0) {
+            $actualCompareUrl = str_replace(
+                'https://github.com/',
+                'https://api.github.com/repos/',
+                $actualCompareUrl
+            );
+        }
+        
+        // Validate the resulting URL
+        $parsedUrl = parse_url($actualCompareUrl);
+        if ($parsedUrl === false) {
+            error_log("Invalid URL generated for compare API: " . $actualCompareUrl);
+            $actualCompareUrl = '';
+        } else {
+            // Validate URL components
+            if (!isset($parsedUrl['scheme']) || !isset($parsedUrl['host']) || !isset($parsedUrl['path'])) {
+                error_log("Malformed URL - missing required components: " . $actualCompareUrl);
+                $actualCompareUrl = '';
+            } else {
+                // Validate API path pattern
+                $path = $parsedUrl['path'];
+                
+                // Check for double "repos/" insertion
+                if (strpos($path, '/repos/repos/') !== false) {
+                    error_log("Double 'repos/' detected in URL path: " . $path);
+                    // Fix double repos
+                    $path = str_replace('/repos/repos/', '/repos/', $path);
+                    $actualCompareUrl = $parsedUrl['scheme'] . '://' . $parsedUrl['host'] . $path;
+                }
+                
+                // Validate path pattern: /repos/{owner}/{repo}/compare/{base}...{head}
+                if (!preg_match('#^/repos/([^/]+)/([^/]+)/compare/([^/]+)$#', $path, $matches)) {
+                    error_log("Invalid API path pattern: " . $path);
+                    $actualCompareUrl = '';
+                } else {
+                    // Extract and validate owner and repo
+                    $owner = $matches[1];
+                    $repo = $matches[2];
+                    $compareRange = $matches[3];
+                    
+                    if (empty($owner) || empty($repo)) {
+                        error_log("Empty owner or repo in URL: owner='$owner', repo='$repo'");
+                        $actualCompareUrl = '';
+                    } else if (!strpos($compareRange, '...')) {
+                        error_log("Invalid compare range format (missing '...'): " . $compareRange);
+                        $actualCompareUrl = '';
+                    } else {
+                        // Validate host
+                        if ($parsedUrl['host'] !== 'api.github.com') {
+                            error_log("Invalid API host: " . $parsedUrl['host'] . " (expected api.github.com)");
+                            $actualCompareUrl = '';
+                        } else {
+                            // URL is valid
+                            echo "  → GitHub Compare API URL validated: " . $actualCompareUrl . "\n";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Prepare data for template
+    $promptData = [
+        'is_merge_with_conflict' => $isMergeCommit && isset($hasConflict) && $hasConflict,
+        'repository' => $payload['repository']['full_name'] ?? 'Unknown',
+        'branch' => $branch,
+        'author' => $payload['pusher']['name'] ?? 'Unknown',
+        'before_commit' => substr($beforeCommit, 0, 7),
+        'after_commit' => substr($afterCommit, 0, 7),
+        'commits' => $commitInfo,
+        'compare_url' => $actualCompareUrl,
+        'repo_name' => $repoName,
+        'commit_count' => count($commitInfo)
+    ];
+    
+    // Build prompt using appropriate method
+    if ($templateType !== 'json') {
+        $prompt = buildPromptFromYamlTemplate($template, $promptData, $templateType);
     } else {
-        $prompt .= "\n=== Git 분석 작업 ===\n";
-        $prompt .= "source 폴더로 이동하여 git 으로 변경된 내용을 분석 해주세요:\n";
-        $prompt .= "source >  cd ./source/{$repoName}\n";
+        // Fallback to JSON template builder
+        $prompt = buildPromptFromTemplate($template, $promptData);
     }
-    $prompt .= "\n=== 요약 형식 ===\n";
-    $prompt .= "다음 형식으로 요약해주세요:\n";
-    $prompt .= "📌 **주요 변경사항**: (1-2줄로 핵심 변경 내용)\n";
-    $prompt .= "📁 **영향받는 모듈**: (주요 파일/디렉토리)\n";
-    $prompt .= "🎯 **변경 목적**: (커밋 메시지와 코드 변경 기반 추측)\n";
-    
-    // Add conflict resolution analysis section for merge commits with conflicts
-    if ($isMergeCommit && isset($hasConflict) && $hasConflict) {
-        $prompt .= "⚠️ **충돌 해결 내역**: (충돌이 발생했던 파일과 해결 방법)\n";
-        $prompt .= "\n충돌 분석 시 다음 사항을 확인해주세요:\n";
-        $prompt .= "- 어떤 파일에서 충돌이 발생했는지\n";
-        $prompt .= "- 충돌이 어떻게 해결되었는지 (어느 브랜치의 코드를 선택했는지)\n";
-        $prompt .= "- 충돌 해결 과정에서 추가/수정된 코드가 있는지\n";
-    }
-    
-    $prompt .= "\n문서 길이는 전체 100 Line 이내로 간결하게 작성해주세요.\n";
-    $prompt .= "\n작업된 내용만 작성하고 제안 사항을 적는것은 금지 합니다.\n";
-    $prompt .= "\n중요: GitHub Compare API를 직접 호출하여 실제 코드 변경사항을 확인한 후 분석해주세요.";
     
     // Check prompt size to prevent Claude errors
     $promptLength = strlen($prompt);
-    if ($promptLength > 10000) { // If prompt is too long (over 10KB)
-        echo "  ⚠️ Prompt too long ({$promptLength} bytes), trimming...\n";
-        
-        // Simplify the prompt for large commits
-        $prompt = "다음 Git Push 이벤트의 변경사항을 분석하고 한국어로 요약해주세요.\n\n";
-        $prompt .= "=== 기본 정보 ===\n";
-        $prompt .= "저장소: " . ($payload['repository']['full_name'] ?? 'Unknown') . "\n";
-        $prompt .= "브랜치: " . $branch . "\n";
-        $prompt .= "커밋 수: " . $totalCommits . "개\n";
-        $prompt .= "커밋 범위: " . substr($beforeCommit, 0, 7) . " → " . substr($afterCommit, 0, 7) . "\n\n";
-        
-        if (!empty($compareUrl) && !empty($beforeCommit) && !empty($afterCommit)) {
-            $actualCompareUrl = str_replace(
-                ['{base}', '{head}'],
-                [$beforeCommit, $afterCommit],
-                $compareUrl
-            );
-            $prompt .= "GitHub Compare URL: " . $actualCompareUrl . "\n\n";
-            $prompt .= "위 URL을 사용하여 변경사항을 직접 확인하고 다음 형식으로 요약해주세요:\n";
-        }
-        
-        $prompt .= "📌 **주요 변경사항**: (핵심 변경 내용)\n";
-        $prompt .= "📁 **영향받는 모듈**: (주요 파일/디렉토리)\n";
-        $prompt .= "🎯 **변경 목적**: (추측)\n";
-        $prompt .= "\n50줄 이내로 매우 간결하게 작성해주세요.";
+    $maxPromptLength = 10000; // Default max length
+    
+    if ($templateType !== 'json' && isset($template['settings']['max_prompt_length'])) {
+        $maxPromptLength = $template['settings']['max_prompt_length'];
+    } elseif ($templateType === 'json' && isset($template['settings']['max_prompt_length'])) {
+        $maxPromptLength = $template['settings']['max_prompt_length'];
     }
+    
+    if ($promptLength > $maxPromptLength) { // If prompt is too long
+        echo "  ⚠️ Prompt too long ({$promptLength} bytes), switching to simplified version...\n";
+        
+        // Reload as simplified template
+        try {
+            $template = loadYamlPromptTemplate('simplified');
+            $prompt = buildPromptFromYamlTemplate($template, $promptData, 'simplified');
+        } catch (Exception $e) {
+            // Fallback to JSON simplified
+            $prompt = buildSimplifiedPromptFromTemplate($template, $promptData);
+        }
+    }
+    
+    // Save prompt to log file for debugging
+    $promptLogDir = dirname(__FILE__) . '/logs/claude_prompts';
+    if (!is_dir($promptLogDir)) {
+        mkdir($promptLogDir, 0755, true);
+    }
+    
+    $promptLogFile = $promptLogDir . '/' . date('Y-m-d_H-i-s') . '_' . 
+                     str_replace('/', '_', $payload['repository']['full_name'] ?? 'unknown') . 
+                     '_prompt.txt';
+    
+    // Save the full prompt to file
+    $fullPromptContent = "=== SYSTEM PROMPT ===\n";
+    $fullPromptContent .= $systemPrompt . "\n\n";
+    $fullPromptContent .= "=== USER PROMPT ===\n";
+    $fullPromptContent .= $prompt . "\n\n";
+    $fullPromptContent .= "=== METADATA ===\n";
+    $fullPromptContent .= "Repository: " . ($payload['repository']['full_name'] ?? 'unknown') . "\n";
+    $fullPromptContent .= "Branch: " . $branch . "\n";
+    $fullPromptContent .= "Commit Range: " . substr($beforeCommit, 0, 7) . " → " . substr($afterCommit, 0, 7) . "\n";
+    $fullPromptContent .= "Prompt Size: " . strlen($prompt) . " bytes\n";
+    $fullPromptContent .= "Timestamp: " . date('Y-m-d H:i:s') . "\n";
+    
+    file_put_contents($promptLogFile, $fullPromptContent);
+    echo "  → Prompt saved to: logs/claude_prompts/" . basename($promptLogFile) . "\n";
     
     // Escape the system prompt for shell command
     $escapedSystemPrompt = str_replace("\n", "\\n", addslashes($systemPrompt));
@@ -308,6 +716,7 @@ function analyzePushEvent($webhookData) {
     // Log the command
     error_log("Executing Claude command for: " . ($payload['repository']['full_name'] ?? 'unknown'));
     error_log("Prompt size: " . strlen($prompt) . " bytes");
+    error_log("Prompt log saved to: " . $promptLogFile);
     
     // Execute Claude command
     $output = [];

@@ -207,6 +207,26 @@ function markdownToJira($text) {
  * Create Jira comment content from analysis data
  */
 function createJiraComment($analysisData) {
+    // Check for Claude error patterns in the analysis content
+    $fullContent = isset($analysisData['full_analysis']) ? $analysisData['full_analysis'] : '';
+    
+    // Check for Claude error messages
+    $claudeErrorPatterns = [
+        '/Execution error:/',
+        '/Error executing Claude command/',
+        '/Claude return code: [^0]/',
+        '/Claude analysis failed/',
+        '/⚠️ Claude token limit exceeded/',
+        '/Content too long for Claude analysis/',
+    ];
+    
+    foreach ($claudeErrorPatterns as $pattern) {
+        if (preg_match($pattern, $fullContent)) {
+            echo "  ❌ Claude error detected in analysis content\n";
+            return false;  // Return false to indicate error
+        }
+    }
+    
     // Build comment in Markdown first
     $markdown = "{$analysisData['repository']}:{$analysisData['branch']} / {$analysisData['pusher']} {$analysisData['generated']}\n\n";
     $markdown .= "---\n\n";
@@ -394,9 +414,13 @@ function sendJiraComment($ticketId, $comment) {
 /**
  * Process a single analysis file
  */
-function processAnalysisFile($filepath) {
+function processAnalysisFile($filepath, $debugMode = false) {
     $filename = basename($filepath);
     echo "Processing: {$filename}\n";
+    
+    if ($debugMode) {
+        echo "  🔍 DEBUG MODE - Will not send to Jira\n";
+    }
     
     // Parse the analysis file
     $analysisData = parseAnalysisFile($filepath);
@@ -476,10 +500,10 @@ function processAnalysisFile($filepath) {
     
     echo "  Jira Ticket: {$ticketId}\n";
     
-    // Check if Jira credentials are configured
-    if (JIRA_BASE_URL === 'https://your-domain.atlassian.net' || 
+    // Check if Jira credentials are configured (skip in debug mode)
+    if (!$debugMode && (JIRA_BASE_URL === 'https://your-domain.atlassian.net' || 
         JIRA_EMAIL === 'your-email@example.com' || 
-        JIRA_API_TOKEN === 'your-api-token') {
+        JIRA_API_TOKEN === 'your-api-token')) {
         echo "  ⚠️  Jira credentials not configured. Please update the configuration.\n";
         
         // Save what would be sent for testing
@@ -495,13 +519,64 @@ function processAnalysisFile($filepath) {
     // Create content for Jira
     $content = createJiraComment($analysisData);
     
-    // Debug: Show what content will be sent
-    echo "  === Content to send ===\n";
+    // Check if content creation failed (Claude error detected)
+    if ($content === false) {
+        echo "  ⚠️ Claude error detected in analysis content - skipping Jira posting\n";
+        
+        // Move to error directory
+        global $logsDir;
+        $errorDir = dirname($filepath) . '/../error_analysis';
+        if (!is_dir($errorDir)) {
+            mkdir($errorDir, 0777, true);
+        }
+        
+        $errorFile = $errorDir . '/' . basename($filepath);
+        if (rename($filepath, $errorFile)) {
+            echo "  📁 Moved to error directory for review\n";
+        }
+        
+        // Log the error
+        $logEntry = date('Y-m-d H:i:s') . " | ERROR | Claude error in content | " . basename($filepath) . "\n";
+        file_put_contents($logsDir . '/jira_errors.log', $logEntry, FILE_APPEND);
+        
+        return false;
+    }
+    
+    // Show content
+    echo "  === Content " . ($debugMode ? "(DEBUG MODE - NOT SENT)" : "to send") . " ===\n";
     echo "  " . str_replace("\n", "\n  ", substr($content, 0, 500)) . "\n";
     if (strlen($content) > 500) {
         echo "  ... (+" . (strlen($content) - 500) . " more characters)\n";
     }
     echo "  === End of content preview ===\n";
+    
+    // In debug mode, skip actual Jira API calls
+    if ($debugMode) {
+        echo "  📝 DEBUG: Skipping Jira API calls\n";
+        echo "  📋 Full content length: " . strlen($content) . " characters\n";
+        
+        // Save debug output to file
+        global $processedJiraDir, $logsDir;
+        $debugFile = $processedJiraDir . '/debug_' . $ticketId . '_' . date('Y-m-d_H-i-s') . '.txt';
+        file_put_contents($debugFile, "=== DEBUG OUTPUT ===\n");
+        file_put_contents($debugFile, "Ticket: {$ticketId}\n", FILE_APPEND);
+        file_put_contents($debugFile, "Repository: {$analysisData['repository']}\n", FILE_APPEND);
+        file_put_contents($debugFile, "Branch: {$analysisData['branch']}\n", FILE_APPEND);
+        file_put_contents($debugFile, "Pusher: {$analysisData['pusher']}\n", FILE_APPEND);
+        file_put_contents($debugFile, "Generated: {$analysisData['generated']}\n\n", FILE_APPEND);
+        file_put_contents($debugFile, "=== JIRA CONTENT ===\n", FILE_APPEND);
+        file_put_contents($debugFile, $content, FILE_APPEND);
+        echo "  💾 Debug output saved to: " . basename($debugFile) . "\n";
+        
+        // Move to processed directory
+        moveToProcessed($filepath, $processedJiraDir);
+        
+        // Log as debug
+        $logEntry = date('Y-m-d H:i:s') . " | DEBUG | {$ticketId} | {$filename} | debug_mode\n";
+        file_put_contents($logsDir . '/jira_success.log', $logEntry, FILE_APPEND);
+        
+        return true;
+    }
     
     // Check if issue exists and get its details
     echo "  Checking Jira issue details...\n";
@@ -558,7 +633,7 @@ function processAnalysisFile($filepath) {
 /**
  * Main processing function
  */
-function processAnalysisFiles() {
+function processAnalysisFiles($debugMode = false) {
     global $analysisDir;
     
     // Get all markdown files in analysis directory
@@ -575,7 +650,7 @@ function processAnalysisFiles() {
     $failed = 0;
     
     foreach ($files as $file) {
-        if (processAnalysisFile($file)) {
+        if (processAnalysisFile($file, $debugMode)) {
             $processed++;
         } else {
             $failed++;
@@ -590,7 +665,14 @@ function processAnalysisFiles() {
 
 // Check if script is run from command line
 if (isCliMode()) {
-    echo "=== Jira Integration Hook ===\n";
+    // Check for debug mode
+    $debugMode = false;
+    if (isset($argv[1]) && ($argv[1] === '--debug' || $argv[1] === '-d')) {
+        $debugMode = true;
+        echo "=== Jira Integration Hook (DEBUG MODE) ===\n";
+    } else {
+        echo "=== Jira Integration Hook ===\n";
+    }
     echo "Time: " . date('Y-m-d H:i:s') . "\n\n";
     
     // Create lock manager
@@ -601,8 +683,8 @@ if (isCliMode()) {
         exit(0);
     }
     
-    // Check configuration
-    if (JIRA_BASE_URL === 'https://your-domain.atlassian.net') {
+    // Check configuration (skip warning in debug mode)
+    if (!$debugMode && JIRA_BASE_URL === 'https://your-domain.atlassian.net') {
         displayMessage("WARNING: Jira configuration not set!", 'warning');
         echo "Please update the following constants in .env file:\n";
         echo "  - JIRA_BASE_URL\n";
@@ -611,7 +693,14 @@ if (isCliMode()) {
         echo "Continuing in test mode...\n\n";
     }
     
-    processAnalysisFiles();
+    if ($debugMode) {
+        echo "🔍 DEBUG MODE ACTIVE\n";
+        echo "  - Content will be displayed but NOT sent to Jira\n";
+        echo "  - Files will be moved to processed_jira directory\n";
+        echo "  - Debug output will be saved to processed_jira/debug_*.txt\n\n";
+    }
+    
+    processAnalysisFiles($debugMode);
     
     echo "\nFinished at: " . date('Y-m-d H:i:s') . "\n";
 } else {
