@@ -77,8 +77,21 @@ function parseAnalysisFile($filepath) {
     
     // Extract analysis sections
     // Extract all analysis content after "## Claude AI Analysis" or "## Analysis Results"
-    if (preg_match('/##\s*(Claude AI Analysis|Analysis Results)\s*\n(.+?)(?=\n---|\Z)/s', $content, $matches)) {
-        $data['full_analysis'] = trim($matches[2]);
+    // Look for content until the end of file or the analysis footer
+    if (preg_match('/##\s*(Claude AI Analysis|Analysis Results)\s*\n(.+?)(?=\n\*Analysis performed|\Z)/s', $content, $matches)) {
+        // The captured content might include intermediate --- separators, so clean it up
+        $analysisContent = trim($matches[2]);
+        
+        // If the content starts with English text and has a separator, extract Korean content after it
+        if (strpos($analysisContent, 'Based on my analysis') === 0 && strpos($analysisContent, '---') !== false) {
+            // Extract content after the first --- separator
+            $parts = explode('---', $analysisContent, 2);
+            if (count($parts) > 1) {
+                $analysisContent = trim($parts[1]);
+            }
+        }
+        
+        $data['full_analysis'] = $analysisContent;
         
         // Also extract individual sections for backward compatibility
         if (preg_match('/📌\s*\*\*주요 변경사항\*\*:\s*(.+?)(?=\n\n|📁|$)/s', $data['full_analysis'], $subMatches)) {

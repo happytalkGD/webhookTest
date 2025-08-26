@@ -138,6 +138,11 @@ php test_compare_url.php
 # Jira 통합 실행 (PHP)
 php jira.hook.php
 
+# Jira 디버그 모드 실행 (콘텐츠 확인용, 실제 전송하지 않음)
+php jira.hook.php --debug
+# 또는
+php jira.hook.php -d
+
 # Jira 통합 실행 (Shell)
 ./jira_integration.sh
 ```
@@ -163,10 +168,14 @@ tail -f logs/cron_jira.log
 - `[PROJ-123]` - 표준 Jira 형식
 - `P03-45` - 대괄호 없는 형식
 - `PROJ-123` - 표준 형식
+- `feature/PROJ-123` - 브랜치명의 슬래시 뒤
+- `ABC1-234` - 알파벳+숫자 혼합 형식
 
 티켓 ID는 다음 순서로 검색됩니다:
 1. 커밋 메시지
 2. 브랜치 이름
+
+**중요**: Jira 티켓 ID가 없는 커밋은 분석 자체를 건너뜁니다.
 
 ## Markdown 지원 형식
 
@@ -220,13 +229,33 @@ tail -f logs/cron_jira.log
    - Claude 분석 중 오류 발생 시 `error_analysis/` 디렉토리로 이동
    - Jira로 발송되지 않고 개발자 검토 필요
    - 로그 확인: `tail -f logs/jira_errors.log`
+   - Claude 에러 패턴 자동 감지:
+     * `Execution error:`
+     * `Error executing Claude command`
+     * `Claude return code: [0이 아닌 값]`
+     * `Claude token limit exceeded`
+     * `Content too long for Claude analysis`
+
+5. **Jira 티켓 ID가 없는 경우**
+   - 분석 단계에서 자동으로 건너뜀
+   - `processed_webhooks/`로 이동 (분석하지 않음)
+   - 콘솔에 "No Jira ticket ID found" 메시지 출력
 
 ### 디버깅 모드
 
 ```bash
 # PHP 에러 표시 활성화 (개발 시에만)
 sed -i 's/ini_set('\''display_errors'\'', 0)/ini_set('\''display_errors'\'', 1)/' *.php
+
+# Jira 디버그 모드 (실제 전송 없이 콘텐츠만 확인)
+php jira.hook.php --debug
 ```
+
+#### Jira 디버그 모드 기능
+- Jira API 호출을 건너뛰고 콘텐츠만 출력
+- 파일은 정상적으로 `processed_jira/`로 이동
+- 디버그 결과는 `processed_jira/debug_티켓ID_*.txt`에 저장
+- 로그는 `jira_success.log`에 DEBUG로 기록
 
 ## Claude AI 분석 기능
 
@@ -243,6 +272,11 @@ claude.analyze.php는 이제 GitHub Compare API를 직접 활용하여 더 정�
    - Claude가 GitHub API를 호출하여 실제 변경사항 확인
    - 파일별 patch (diff) 정보 분석
    - 추가/삭제된 줄 수 및 코드 내용 파악
+   - **URL 검증 기능**:
+     * `parse_url()`로 URL 유효성 확인
+     * API 경로 패턴 검증 (`/repos/{owner}/{repo}/compare/{base}...{head}`)
+     * 이중 `repos/` 삽입 방지 및 자동 수정
+     * 호스트가 `api.github.com`인지 확인
 
 3. **분석 품질 향상**
    - 로컬 저장소 의존성 제거
@@ -324,13 +358,18 @@ php preview_prompt.php simplified
 - 프롬프트 통계 (줄 수, 문자 수, 바이트)
 - 사용된 템플릿 변수 목록
 
-### 프롬프트 로깅
+### 프롬프트 로깅 및 분석 파싱
 
 모든 Claude AI 프롬프트는 디버깅을 위해 자동으로 로깅됩니다:
 
 - 위치: `logs/claude_prompts/`
 - 파일명: `YYYY-MM-DD_HH-ii-ss_저장소명_prompt.txt`
 - 내용: System Prompt, User Prompt, 메타데이터
+
+#### 분석 결과 파싱 개선
+- Claude AI Analysis 섹션의 정확한 추출
+- 영어 텍스트와 한국어 분석 내용 자동 분리
+- `---` 구분자 처리 최적화
 
 ```bash
 # 최근 프롬프트 로그 확인
@@ -378,3 +417,36 @@ echo "  Jira: $(tail -1 logs/cron_jira.log 2>/dev/null)"
 ```
 
 사용법: `chmod +x status_check.sh && ./status_check.sh`
+
+## 최신 업데이트 내역
+
+### 2025-08-26 주요 개선사항
+
+1. **Jira 티켓 ID 사전 검증**
+   - 분석 전에 Jira 티켓 ID 존재 여부 확인
+   - 티켓 ID가 없으면 Claude 분석을 건너뛰어 리소스 절약
+
+2. **Jira 디버그 모드 추가**
+   - `--debug` 또는 `-d` 플래그로 실행
+   - 실제 전송 없이 콘텐츠 미리보기
+   - 디버그 결과 파일로 저장
+
+3. **GitHub Compare API URL 검증 강화**
+   - URL 구조 및 패턴 검증
+   - 잘못된 URL 자동 수정 또는 거부
+   - 상세한 에러 로깅
+
+4. **Claude 에러 감지 개선**
+   - 분석 결과에서 Claude 에러 패턴 자동 감지
+   - 에러가 있는 분석은 Jira로 전송하지 않음
+   - `error_analysis/` 디렉토리로 자동 이동
+
+5. **템플릿 시스템 개선**
+   - YAML 템플릿 우선 지원
+   - 한국어/영어 버전 분리 (`.kr.yaml`)
+   - 프롬프트 미리보기 도구 제공
+
+6. **분석 파싱 최적화**
+   - Claude AI Analysis 섹션 추출 개선
+   - 영어 텍스트와 한국어 내용 자동 분리
+   - Jira 마크업 변환 정확도 향상
