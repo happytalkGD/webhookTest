@@ -16,8 +16,9 @@ if (!function_exists('yaml_parse_file')) {
     }
 }
 
-// Initialize environment
-$dirs = initializeEnvironment('claude_analyze');
+// Initialize environment with verbose output for first run
+$showDirInit = isset($argv[1]) && $argv[1] === '--init-dirs';
+$dirs = initializeEnvironment('claude_analyze', $showDirInit);
 
 // Configuration
 $webhookDataDir = $dirs['pending_webhooks'];
@@ -681,10 +682,9 @@ function analyzePushEvent($webhookData) {
     }
     
     // Save prompt to log file for debugging
-    $promptLogDir = dirname(__FILE__) . '/logs/claude_prompts';
-    if (!is_dir($promptLogDir)) {
-        mkdir($promptLogDir, 0755, true);
-    }
+    // Directory already created by initializeEnvironment()
+    global $dirs;
+    $promptLogDir = $dirs['logs_claude_prompts'];
     
     $promptLogFile = $promptLogDir . '/' . date('Y-m-d_H-i-s') . '_' . 
                      str_replace('/', '_', $payload['repository']['full_name'] ?? 'unknown') . 

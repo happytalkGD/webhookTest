@@ -64,6 +64,7 @@ function setupErrorLogging($logFile = null) {
  * @param string|array $dirs Directory path(s) to create
  * @param int $permissions Directory permissions
  * @return bool Success status
+ * @deprecated Use initializeEnvironment() instead for system directories
  */
 function ensureDirectoryExists($dirs, $permissions = 0777) {
     if (!is_array($dirs)) {
@@ -319,38 +320,74 @@ function getDirectoryPaths() {
     return [
         'base' => $baseDir,
         'logs' => $baseDir . '/logs',
+        'logs_claude_prompts' => $baseDir . '/logs/claude_prompts',  // Claude prompt logs
         'locks' => $baseDir . '/locks',
         'pending_webhooks' => $baseDir . '/pending_webhooks',
         'pending_analysis' => $baseDir . '/pending_analysis',
         'processed_webhooks' => $baseDir . '/processed_webhooks',
         'processed_jira' => $baseDir . '/processed_jira',
         'error_analysis' => $baseDir . '/error_analysis',
+        'source' => $baseDir . '/source',  // Git repositories directory
+        'backups' => $baseDir . '/backups',  // Backup directory for safety
     ];
 }
 
 /**
  * Initialize common environment
  * @param string $scriptName Name of the script
+ * @param bool $verbose Show directory creation messages
  * @return array Configuration and paths
  */
-function initializeEnvironment($scriptName) {
+function initializeEnvironment($scriptName, $verbose = false) {
     // Load environment variables
     loadEnvFile();
     
-    // Setup error logging
+    // Get all directory paths
     $dirs = getDirectoryPaths();
-    ensureDirectoryExists($dirs['logs']);
-    setupErrorLogging($dirs['logs'] . '/' . $scriptName . '_errors.log');
     
-    // Ensure all necessary directories exist
-    ensureDirectoryExists([
-        $dirs['locks'],
-        $dirs['pending_webhooks'],
-        $dirs['pending_analysis'],
-        $dirs['processed_webhooks'],
-        $dirs['processed_jira'],
-        $dirs['error_analysis']
-    ]);
+    // Create all directories at once
+    $dirsToCreate = [
+        $dirs['logs'] => 'Log files',
+        $dirs['logs_claude_prompts'] => 'Claude prompt logs',
+        $dirs['locks'] => 'Lock files',
+        $dirs['pending_webhooks'] => 'Pending webhook data',
+        $dirs['pending_analysis'] => 'Pending analysis files',
+        $dirs['processed_webhooks'] => 'Processed webhook data',
+        $dirs['processed_jira'] => 'Processed Jira posts',
+        $dirs['error_analysis'] => 'Error analysis files',
+        $dirs['source'] => 'Git repositories',
+        $dirs['backups'] => 'Backup files'
+    ];
+    
+    if ($verbose) {
+        echo "=== Initializing Directory Structure ===\n";
+    }
+    
+    foreach ($dirsToCreate as $dir => $description) {
+        if (!is_dir($dir)) {
+            if (mkdir($dir, 0777, true)) {
+                if ($verbose) {
+                    echo "  ✅ Created: {$dir} ({$description})\n";
+                }
+            } else {
+                error_log("Failed to create directory: {$dir}");
+                if ($verbose) {
+                    echo "  ❌ Failed: {$dir} ({$description})\n";
+                }
+            }
+        } else {
+            if ($verbose) {
+                echo "  ✓ Exists: {$dir} ({$description})\n";
+            }
+        }
+    }
+    
+    if ($verbose) {
+        echo "\n";
+    }
+    
+    // Setup error logging for this specific script
+    setupErrorLogging($dirs['logs'] . '/' . $scriptName . '_errors.log');
     
     return $dirs;
 }
@@ -377,6 +414,45 @@ function moveToProcessed($sourceFile, $processedDir) {
         displayMessage("Failed to move or delete file", 'error', 1);
         return false;
     }
+}
+
+/**
+ * Display system directory structure status
+ * Shows the current status of all system directories
+ */
+function displayDirectoryStatus() {
+    $dirs = getDirectoryPaths();
+    
+    echo "=== System Directory Status ===\n";
+    echo "Base Directory: {$dirs['base']}\n\n";
+    
+    $dirStatus = [
+        'logs' => 'Log files storage',
+        'logs_claude_prompts' => 'Claude prompt logs',
+        'locks' => 'Process lock files',
+        'pending_webhooks' => 'Webhooks awaiting processing',
+        'pending_analysis' => 'Analysis awaiting Jira posting',
+        'processed_webhooks' => 'Completed webhook processing',
+        'processed_jira' => 'Completed Jira posts',
+        'error_analysis' => 'Failed analysis files',
+        'source' => 'Git repository clones',
+        'backups' => 'System backups'
+    ];
+    
+    foreach ($dirStatus as $key => $description) {
+        $path = $dirs[$key];
+        $exists = is_dir($path);
+        $icon = $exists ? '📁' : '❌';
+        
+        if ($exists) {
+            $fileCount = count(glob($path . '/*'));
+            echo "  {$icon} {$key}/ - {$description} ({$fileCount} items)\n";
+        } else {
+            echo "  {$icon} {$key}/ - {$description} (NOT CREATED)\n";
+        }
+    }
+    
+    echo "\n";
 }
 
 // Export constants for configuration
