@@ -34,16 +34,37 @@ php test_webhook.php
 
 # Test analysis functionality
 php test_analyze.php
+
+# Test GitHub Compare URL functionality
+php test_compare_url.php
+
+# Test YAML template parsing
+php test_yaml.php
+
+# Test Jira ticket pattern matching
+php test_jira_pattern.php
+
+# Test Jira markup formatting
+php test_jira_format.php
+
+# Test complex markdown conversion
+php test_complex_markdown.php
 ```
 
 ### Docker Operations
 ```bash
 # Build and run Docker container
-docker build -t webhook-processor .
+docker build -f docker/web/Dockerfile -t webhook-processor .
 docker run -d -p 8807:80 -v $(pwd):/var/www/html webhook-processor
 
 # Access container
 docker exec -it <container_id> bash
+
+# View container logs
+docker logs <container_id> -f
+
+# Stop and remove container
+docker stop <container_id> && docker rm <container_id>
 ```
 
 ### Crontab Setup (Required for Automation)
@@ -66,11 +87,14 @@ docker exec -it <container_id> bash
 ### Core Components
 
 **common.lib.php** - Shared utilities including:
-- `loadEnvFile()` - Environment variable loading
-- `LockManager` class - Prevents duplicate runs (5-minute timeout)
+- `loadEnvFile()` - Environment variable loading (.env file parsing)
+- `LockManager` class - Prevents duplicate runs (5-minute timeout with auto-cleanup)
 - `extractJiraTicketId()` - Matches patterns: `[P03-45]`, `PROJ-123`, `ABC1-234`
-- `initializeEnvironment()` - Sets up directories and logging
-- `moveToProcessed()` - File queue management
+- `initializeEnvironment()` - Sets up directories and logging infrastructure
+- `moveToProcessed()` - File queue management between processing stages
+- `safeJsonDecode()` - Safe JSON parsing with error handling
+- `setupErrorLogging()` - Centralized error logging configuration
+- `validateCompareUrl()` - GitHub Compare API URL validation and correction
 
 ### Processing Flow
 1. GitHub sends webhook to `github.hook.php` endpoint
@@ -89,11 +113,23 @@ docker exec -it <container_id> bash
 
 ### .env File (REQUIRED)
 ```bash
+# Core Jira Configuration
 JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com  
 JIRA_API_TOKEN=your-api-token
+
+# GitHub Webhook Configuration
 WEBHOOK_SECRET=test123
+
+# Optional: Additional Claude/GitHub settings
+# CLAUDE_API_KEY=your-claude-api-key
+# GITHUB_TOKEN=your-github-token
 ```
+
+**Setup Steps:**
+1. Copy `.env.example` to `.env`: `cp .env.example .env`
+2. Generate Jira API token: https://id.atlassian.com/manage-profile/security/api-tokens
+3. Set secure file permissions: `chmod 600 .env`
 
 ### GitHub Webhook Setup
 - Payload URL: `https://your-domain.com/path/to/github.hook.php`
@@ -109,12 +145,24 @@ chmod 777 pending_* processed_* logs/
 
 ## Claude Analysis Configuration
 
-The system uses Claude CLI with specific parameters:
-- Command: `claude -p --permission-mode bypassPermissions`
-- Analyzes git diffs between commits
-- Expects source code at `./source/{repoName}`
-- Outputs Korean language summaries
-- Format: 📌 주요 변경사항, 📁 영향받는 모듈, 🎯 변경 목적
+The system uses Claude CLI with GitHub Compare API integration:
+- **Command**: `claude -p --permission-mode bypassPermissions`
+- **Analysis Source**: GitHub Compare API (not local source files)
+- **Template System**: YAML/JSON-based prompts with variable substitution
+- **Language**: Korean output by default (configurable via templates)
+- **Format**: 📌 주요 변경사항, 📁 영향받는 모듈, 🎯 변경 목적
+
+### Template Priority Order
+1. **YAML templates** (`prompts_*.yaml`) - Primary
+2. **Korean YAML** (`prompts_*.kr.yaml`) - Language variant
+3. **JSON template** (`prompt_template.json`) - Fallback
+
+### Key Architecture Features
+- **GitHub Compare API**: Direct analysis of commit diffs via GitHub API
+- **Error Detection**: Automatic Claude error pattern recognition
+- **Lock Management**: Prevents concurrent execution conflicts
+- **Jira Pre-validation**: Skips analysis if no Jira ticket ID found
+- **Template Preview**: `preview_prompt.php` for testing prompts before use
 
 ## Jira Integration Details
 
@@ -160,9 +208,31 @@ All scripts use lock files to prevent duplicate execution:
 
 ## Development Notes
 
-- PHP 8.2+ required with curl extension
-- Claude CLI must be installed and accessible
-- System expects git repositories at `./source/` directory
-- All scripts check for CLI execution (web access returns 403)
-- Lock mechanism prevents cron overlap when analysis takes >1 minute
-- Korean language output from Claude analysis is intentional
+### System Requirements
+- **PHP**: 8.2+ with curl extension required
+- **Claude CLI**: Must be installed and accessible (`which claude`)
+- **YAML Support**: Native PHP extension or custom parser (`yaml_parser_v2.php`)
+- **File Permissions**: Scripts require 755, directories need 777
+- **CLI Only**: All scripts reject web requests (return 403)
+
+### Architecture Patterns
+- **Queue-based Processing**: Files move through `pending_*` → `processed_*` stages
+- **Lock Management**: 5-minute timeout with stale lock auto-cleanup
+- **Error Isolation**: Failed analysis moved to `error_analysis/` directory
+- **Template System**: Dynamic prompt generation with variable substitution
+- **API Integration**: Direct GitHub Compare API (no local repo dependency)
+
+### File Movement Flow
+```
+GitHub Webhook → pending_webhooks/
+     ↓ (claude.analyze.php)
+pending_analysis/ → processed_webhooks/
+     ↓ (jira.hook.php)  
+processed_jira/ (success) OR error_analysis/ (failure)
+```
+
+### Debugging Utilities
+- `move_analysis_files.sh` - Relocate analysis files between directories
+- `preview_prompt.php` - Test prompt templates before deployment
+- `test_*.php` - Comprehensive test suite (9 test scripts available)
+- `--debug` mode - Dry-run Jira posting with output preview

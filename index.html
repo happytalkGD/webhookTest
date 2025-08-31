@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>홈페이지</title>
+    <title>GitHub Webhook to Jira Integration System</title>
     <style>
         * {
             margin: 0;
@@ -15,36 +15,25 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
+            background: #f5f5f5;
         }
         
         header {
-            background: #4a90e2;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 1rem 0;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 3rem 0;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
-        nav {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 20px;
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
         }
         
-        nav ul {
-            list-style: none;
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-        
-        nav a {
-            color: white;
-            text-decoration: none;
-            transition: opacity 0.3s;
-        }
-        
-        nav a:hover {
-            opacity: 0.8;
+        header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
         }
         
         .container {
@@ -53,209 +42,541 @@
             padding: 2rem 20px;
         }
         
-        .hero {
-            text-align: center;
-            padding: 4rem 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            margin-bottom: 3rem;
-        }
-        
-        .hero h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-        
-        .hero p {
-            font-size: 1.2rem;
-            margin-bottom: 2rem;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 12px 30px;
+        .architecture {
             background: white;
-            color: #667eea;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: transform 0.3s;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-        
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin: 3rem 0;
-        }
-        
-        .feature {
             padding: 2rem;
+            border-radius: 10px;
+            margin: 2rem 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .architecture h2 {
+            color: #667eea;
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
+        }
+        
+        .flow-diagram {
             background: #f8f9fa;
-            border-radius: 10px;
-            text-align: center;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
         }
         
-        .feature h3 {
-            color: #4a90e2;
+        .components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .component {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            border: 2px solid #e1e4e8;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .component:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .component h3 {
+            color: #24292e;
             margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
-        .github-section {
-            background: #24292e;
+        .component .icon {
+            font-size: 1.5rem;
+        }
+        
+        .component ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .component li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .component li:last-child {
+            border-bottom: none;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        
+        .status-active {
+            background: #28a745;
             color: white;
-            padding: 3rem 0;
-            margin: 3rem 0;
+        }
+        
+        .status-pending {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .status-process {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .directories {
+            background: white;
+            padding: 2rem;
             border-radius: 10px;
+            margin: 2rem 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         
-        .github-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
-        
-        .github-section h2 {
-            color: white;
+        .directories h2 {
+            color: #667eea;
             margin-bottom: 1.5rem;
         }
         
-        .github-features {
+        .dir-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 2rem;
-            margin-top: 2rem;
+            gap: 1rem;
         }
         
-        .github-feature {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 1.5rem;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+        .dir-item {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
         }
         
-        .github-feature h4 {
-            color: #58a6ff;
+        .dir-item strong {
+            color: #24292e;
+            display: block;
             margin-bottom: 0.5rem;
         }
         
-        .github-btn {
-            display: inline-block;
-            margin-top: 1.5rem;
-            padding: 10px 20px;
-            background: #238636;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            transition: background 0.3s;
+        .dir-item span {
+            color: #586069;
+            font-size: 0.9rem;
         }
         
-        .github-btn:hover {
-            background: #2ea043;
+        .commands {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            margin: 2rem 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .commands h2 {
+            color: #667eea;
+            margin-bottom: 1.5rem;
+        }
+        
+        .command-group {
+            margin: 1.5rem 0;
+        }
+        
+        .command-group h3 {
+            color: #24292e;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        
+        .code-block {
+            background: #1b1f23;
+            color: #e1e4e8;
+            padding: 1rem;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+        }
+        
+        .code-block.bash {
+            background: #2d333b;
+        }
+        
+        .comment {
+            color: #8b949e;
+        }
+        
+        .configuration {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            margin: 2rem 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .configuration h2 {
+            color: #667eea;
+            margin-bottom: 1.5rem;
+        }
+        
+        .config-item {
+            background: #f6f8fa;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+        
+        .config-item h4 {
+            color: #24292e;
+            margin-bottom: 1rem;
+        }
+        
+        .troubleshooting {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .troubleshooting h2 {
+            color: #856404;
+            margin-bottom: 1rem;
+        }
+        
+        .troubleshooting ul {
+            margin-left: 1.5rem;
+        }
+        
+        .troubleshooting li {
+            margin: 0.5rem 0;
         }
         
         footer {
-            background: #333;
+            background: #24292e;
             color: white;
             text-align: center;
             padding: 2rem 0;
             margin-top: 4rem;
         }
+        
+        .tag {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            background: #e1e4e8;
+            color: #24292e;
+            border-radius: 3px;
+            font-size: 0.85rem;
+            margin: 0.2rem;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        
+        .info {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
     <header>
-        <nav>
-            <ul>
-                <li><a href="#home">홈</a></li>
-                <li><a href="#about">소개</a></li>
-                <li><a href="#services">서비스</a></li>
-                <li><a href="#github">GitHub</a></li>
-                <li><a href="#contact">연락처</a></li>
-            </ul>
-        </nav>
+        <h1>GitHub Webhook → Claude AI → Jira Integration</h1>
+        <p>자동화된 Git 커밋 분석 및 Jira 이슈 업데이트 시스템</p>
     </header>
     
-    <section class="hero">
-        <h1>환영합니다</h1>
-        <p>우리의 새로운 웹사이트에 오신 것을 환영합니다</p>
-        <a href="#services" class="btn">자세히 알아보기</a>
-    </section>
-    
     <div class="container">
-        <section id="about">
-            <h2>우리에 대하여</h2>
-            <p>최고의 서비스를 제공하기 위해 항상 노력하고 있습니다. 고객 만족을 최우선으로 생각하며, 혁신적인 솔루션을 제공합니다.</p>
-        </section>
-        
-        <section id="services" class="features">
-            <div class="feature">
-                <h3>빠른 서비스</h3>
-                <p>신속하고 효율적인 서비스로 고객님의 시간을 절약해드립니다.</p>
-            </div>
-            <div class="feature">
-                <h3>전문성</h3>
-                <p>각 분야의 전문가들이 최상의 품질을 보장합니다.</p>
-            </div>
-            <div class="feature">
-                <h3>24/7 지원</h3>
-                <p>언제든지 도움이 필요하실 때 저희가 함께합니다.</p>
+        <section class="architecture">
+            <h2>📋 시스템 개요</h2>
+            <p>이 시스템은 GitHub Push 이벤트를 받아 Claude AI로 자동 분석한 후, 분석 결과를 Jira 이슈에 자동으로 업데이트하는 3단계 파이프라인입니다.</p>
+            
+            <div class="flow-diagram">
+                <pre>
+[GitHub Push Event]
+        ↓
+[github.hook.php] → 웹훅 수신 → pending_webhooks/
+        ↓
+[claude.analyze.php] → AI 분석 → pending_analysis/
+        ↓
+[jira.hook.php] → Jira 업데이트 → processed_jira/
+                </pre>
             </div>
         </section>
-        
-        <section id="github" class="github-section">
-            <div class="github-content">
-                <h2>GitHub - 개발자를 위한 플랫폼</h2>
-                <p>GitHub는 전 세계 개발자들이 코드를 공유하고 협업하는 세계 최대의 소프트웨어 개발 플랫폼입니다. 
-                   1억 명 이상의 개발자가 사용하며, 4억 2천만 개 이상의 저장소가 호스팅되고 있습니다.</p>
-                
-                <div class="github-features">
-                    <div class="github-feature">
-                        <h4>버전 관리</h4>
-                        <p>Git을 기반으로 한 강력한 버전 관리 시스템으로 코드의 모든 변경 사항을 추적하고 관리할 수 있습니다.</p>
-                    </div>
-                    <div class="github-feature">
-                        <h4>협업 도구</h4>
-                        <p>Pull Request, Issues, Projects 등 다양한 협업 기능으로 팀원들과 효율적으로 작업할 수 있습니다.</p>
-                    </div>
-                    <div class="github-feature">
-                        <h4>오픈소스</h4>
-                        <p>수백만 개의 오픈소스 프로젝트를 탐색하고 기여할 수 있으며, 자신의 프로젝트도 공유할 수 있습니다.</p>
-                    </div>
-                    <div class="github-feature">
-                        <h4>GitHub Actions</h4>
-                        <p>CI/CD 파이프라인을 구축하여 테스트, 빌드, 배포를 자동화할 수 있습니다.</p>
-                    </div>
-                </div>
-                
-                <h3 style="margin-top: 2rem; color: white;">주요 기능</h3>
-                <ul style="list-style: none; padding: 0; margin-top: 1rem;">
-                    <li style="margin: 0.5rem 0;">✓ 무제한 공개 저장소</li>
-                    <li style="margin: 0.5rem 0;">✓ 코드 리뷰 및 피드백</li>
-                    <li style="margin: 0.5rem 0;">✓ 프로젝트 관리 도구</li>
-                    <li style="margin: 0.5rem 0;">✓ 보안 취약점 스캔</li>
-                    <li style="margin: 0.5rem 0;">✓ 문서화 및 위키</li>
-                    <li style="margin: 0.5rem 0;">✓ GitHub Copilot AI 코딩 도우미</li>
+
+        <section class="components">
+            <div class="component">
+                <h3><span class="icon">📥</span> Stage 1: Webhook 수신</h3>
+                <ul>
+                    <li><strong>github.hook.php</strong></li>
+                    <li>GitHub 웹훅 이벤트 수신</li>
+                    <li>서명 검증 (HMAC-SHA256)</li>
+                    <li>JSON 데이터를 pending_webhooks/에 저장</li>
+                    <li><span class="status-badge status-active">자동 실행</span></li>
                 </ul>
-                
-                <a href="https://github.com" target="_blank" class="github-btn">GitHub 시작하기 →</a>
+            </div>
+
+            <div class="component">
+                <h3><span class="icon">🤖</span> Stage 2: Claude AI 분석</h3>
+                <ul>
+                    <li><strong>claude.analyze.php</strong></li>
+                    <li>pending_webhooks/에서 파일 읽기</li>
+                    <li>Claude CLI로 커밋 분석</li>
+                    <li>한국어 분석 리포트 생성</li>
+                    <li>pending_analysis/에 마크다운 저장</li>
+                    <li><span class="status-badge status-process">Cron: 매분 실행</span></li>
+                </ul>
+            </div>
+
+            <div class="component">
+                <h3><span class="icon">📝</span> Stage 3: Jira 업데이트</h3>
+                <ul>
+                    <li><strong>jira.hook.php</strong></li>
+                    <li>pending_analysis/에서 분석 파일 읽기</li>
+                    <li>커밋/브랜치에서 Jira 티켓 ID 추출</li>
+                    <li>마크다운을 Jira 형식으로 변환</li>
+                    <li>Jira REST API로 이슈 업데이트</li>
+                    <li><span class="status-badge status-process">Cron: 2분마다 실행</span></li>
+                </ul>
             </div>
         </section>
-        
-        <section id="contact">
-            <h2>연락처</h2>
-            <p>이메일: info@example.com</p>
-            <p>전화: 02-1234-5678</p>
-            <p>주소: 서울특별시 강남구 테헤란로 123</p>
+
+        <section class="directories">
+            <h2>📁 디렉토리 구조</h2>
+            <div class="dir-grid">
+                <div class="dir-item">
+                    <strong>pending_webhooks/</strong>
+                    <span>GitHub 웹훅 JSON 파일 대기</span>
+                </div>
+                <div class="dir-item">
+                    <strong>pending_analysis/</strong>
+                    <span>AI 분석 완료, Jira 업데이트 대기</span>
+                </div>
+                <div class="dir-item">
+                    <strong>processed_webhooks/</strong>
+                    <span>분석 완료된 웹훅 파일</span>
+                </div>
+                <div class="dir-item">
+                    <strong>processed_jira/</strong>
+                    <span>Jira 업데이트 완료 파일</span>
+                </div>
+                <div class="dir-item">
+                    <strong>logs/</strong>
+                    <span>에러 및 성공 로그</span>
+                </div>
+                <div class="dir-item">
+                    <strong>locks/</strong>
+                    <span>중복 실행 방지 락 파일</span>
+                </div>
+                <div class="dir-item">
+                    <strong>source/</strong>
+                    <span>Git 저장소 클론</span>
+                </div>
+                <div class="dir-item">
+                    <strong>logs/claude_prompts/</strong>
+                    <span>Claude 프롬프트 로그</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="commands">
+            <h2>⚙️ 주요 명령어</h2>
+            
+            <div class="command-group">
+                <h3>수동 실행</h3>
+                <div class="code-block bash">
+<span class="comment"># 웹훅 처리 및 Claude 분석</span>
+php claude.analyze.php
+
+<span class="comment"># Jira 업데이트</span>
+php jira.hook.php
+
+<span class="comment"># Shell 대안 (PHP curl 없을 때)</span>
+./jira_integration.sh
+
+<span class="comment"># 잘못 배치된 분석 파일 이동</span>
+./move_analysis_files.sh
+                </div>
+            </div>
+
+            <div class="command-group">
+                <h3>테스트 명령어</h3>
+                <div class="code-block bash">
+<span class="comment"># Jira API 연결 테스트</span>
+php test_jira_connection.php
+
+<span class="comment"># 테스트 웹훅 데이터 생성</span>
+php test_webhook.php
+
+<span class="comment"># 분석 기능 테스트</span>
+php test_analyze.php
+                </div>
+            </div>
+
+            <div class="command-group">
+                <h3>Crontab 설정 (자동화 필수)</h3>
+                <div class="code-block bash">
+<span class="comment"># crontab -e 에 추가:</span>
+* * * * * cd /var/www/html/webhookTest && php claude.analyze.php >> logs/cron_analyze.log 2>&1
+*/2 * * * * cd /var/www/html/webhookTest && php jira.hook.php >> logs/cron_jira.log 2>&1
+* * * * * /var/www/html/webhookTest/move_analysis_files.sh >> logs/file_mover.log 2>&1
+                </div>
+            </div>
+
+            <div class="command-group">
+                <h3>Docker 운영</h3>
+                <div class="code-block bash">
+<span class="comment"># Docker 컨테이너 빌드 및 실행</span>
+cd docker/
+docker-compose up -d
+
+<span class="comment"># 컨테이너 접속</span>
+docker exec -it webhooktest_web_1 bash
+
+<span class="comment"># 로그 확인</span>
+docker logs webhooktest_web_1
+                </div>
+            </div>
+        </section>
+
+        <section class="configuration">
+            <h2>🔧 환경 설정</h2>
+            
+            <div class="config-item">
+                <h4>.env 파일 (필수)</h4>
+                <div class="code-block">
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@example.com
+JIRA_API_TOKEN=your-api-token
+WEBHOOK_SECRET=test123
+                </div>
+            </div>
+
+            <div class="config-item">
+                <h4>GitHub Webhook 설정</h4>
+                <ul>
+                    <li><strong>Payload URL:</strong> https://your-domain.com/webhookTest/github.hook.php</li>
+                    <li><strong>Content type:</strong> application/json</li>
+                    <li><strong>Secret:</strong> .env의 WEBHOOK_SECRET와 동일</li>
+                    <li><strong>Events:</strong> Just the push event 선택</li>
+                </ul>
+            </div>
+
+            <div class="config-item">
+                <h4>디렉토리 권한</h4>
+                <div class="code-block bash">
+chmod 755 *.php *.sh
+chmod 777 pending_* processed_* logs/
+                </div>
+            </div>
+        </section>
+
+        <section class="architecture">
+            <h2>✨ 주요 기능</h2>
+            
+            <div class="info">
+                <h4>Claude AI 분석</h4>
+                <ul>
+                    <li>Git diff 기반 변경사항 분석</li>
+                    <li>한국어 요약 생성 (주요 변경사항, 영향 모듈, 변경 목적)</li>
+                    <li>병합 충돌 감지 및 특별 처리</li>
+                    <li>대량 커밋 시 자동 요약 모드</li>
+                </ul>
+            </div>
+
+            <div class="info">
+                <h4>Jira 티켓 ID 추출</h4>
+                <ul>
+                    <li>패턴: [P03-45], PROJ-123, ABC1-234</li>
+                    <li>커밋 메시지 우선 검색</li>
+                    <li>브랜치명 폴백 검색</li>
+                </ul>
+            </div>
+
+            <div class="info">
+                <h4>마크다운 → Jira 변환</h4>
+                <ul>
+                    <li>헤더: # → h1., ## → h2.</li>
+                    <li>굵은 글씨: **text** → *text*</li>
+                    <li>코드: `code` → {{code}}</li>
+                    <li>코드 블록: ```code``` → {code}code{code}</li>
+                    <li>이모지 변환 지원</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="troubleshooting">
+            <h2>🔍 문제 해결</h2>
+            <ul>
+                <li><strong>Lock 파일 에러:</strong> locks/ 디렉토리의 오래된 락 파일 삭제</li>
+                <li><strong>Jira 401/403:</strong> API 토큰 및 권한 확인</li>
+                <li><strong>분석 파일이 루트에 생성:</strong> move_analysis_files.sh 스크립트 실행</li>
+                <li><strong>Claude 분석 실패:</strong> Claude CLI 설치 확인 (which claude)</li>
+                <li><strong>웹훅 미수신:</strong> GitHub webhook secret이 .env와 일치하는지 확인</li>
+            </ul>
+            
+            <div class="warning">
+                <strong>⚠️ 주의사항:</strong>
+                <ul>
+                    <li>PHP 8.2+ 및 curl extension 필요</li>
+                    <li>Claude CLI 설치 필수</li>
+                    <li>Crontab 설정 없으면 자동화 안됨</li>
+                    <li>analysis_*.md 파일이 루트에 생성되면 move_analysis_files.sh 실행</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="architecture">
+            <h2>📊 로그 파일</h2>
+            <div class="dir-grid">
+                <div class="dir-item">
+                    <strong>webhook_errors.log</strong>
+                    <span>GitHub 웹훅 수신 오류</span>
+                </div>
+                <div class="dir-item">
+                    <strong>analysis_errors.log</strong>
+                    <span>Claude 분석 오류</span>
+                </div>
+                <div class="dir-item">
+                    <strong>jira_hook_errors.log</strong>
+                    <span>Jira API 오류</span>
+                </div>
+                <div class="dir-item">
+                    <strong>jira_success.log</strong>
+                    <span>Jira 업데이트 성공 기록</span>
+                </div>
+                <div class="dir-item">
+                    <strong>cron_analyze.log</strong>
+                    <span>분석 Cron 실행 로그</span>
+                </div>
+                <div class="dir-item">
+                    <strong>cron_jira.log</strong>
+                    <span>Jira Cron 실행 로그</span>
+                </div>
+            </div>
         </section>
     </div>
     
     <footer>
-        <p>&copy; 2024 웹사이트. All rights reserved.</p>
+        <p>GitHub Webhook to Jira Integration System v1.0</p>
+        <p>Powered by Claude AI | PHP 8.2+ | Docker</p>
     </footer>
 </body>
 </html>
