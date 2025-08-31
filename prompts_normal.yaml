@@ -66,8 +66,8 @@ user_prompt_no_url: |
   {commits_detail}
   
   === Git Analysis Task ===
-  Navigate to source folder and analyze changes with git:
-  source >  cd ./source/{repo_name}
+  Execute the following command to analyze the changes and provide a summary:
+  - Command: cd ./source/{repo_name} && git diff {before_commit}..{after_commit}
   
   === Summary Format ===
   Please summarize in the following format (Korean language required):
