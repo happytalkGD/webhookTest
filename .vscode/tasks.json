@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Claude",
+            "type": "shell",
+            "command": "claude",
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+                {
+            "label": "Run Claude2",
+            "type": "shell",
+            "command": "claude",
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "Run Gemini",
+            "type": "shell",
+            "command": "gemini",
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+
+        {
+            "label": "Run Gemini2",
+            "type": "shell",
+            "command": "gemini",
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        }
+    ]
+}

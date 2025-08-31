@@ -1,0 +1,20 @@
+{
+    // 터미널 프로필 정의 (선택 사항)
+    "terminal.integrated.profiles.linux": {
+        "Claude": {
+            "path": "/bin/bash",
+            "args": [
+                "-c",
+                "claude; exec bash"
+            ]
+        },
+        "Gemini": {
+            "path": "/bin/bash",
+            "args": [
+                "-c",
+                "gemini; exec bash"
+            ]
+        }
+    },
+    "terminal.integrated.defaultProfile.linux": "bash"
+}
