@@ -45,6 +45,11 @@ user_prompt: |
   
   Only write about actual work done, do not write additional suggestions or improvements.
   
+  ⚠️ Critical Restrictions:
+  - DO NOT create any files (analysis reports, log files, temporary files, etc.)
+  - File saving, file writing, file creation operations are strictly FORBIDDEN
+  - Only provide analysis results as a text response
+  
   Important: Provide accurate and specific analysis based on provided information and commit messages.
   All analysis content must be written in Korean.
   
@@ -81,6 +86,11 @@ user_prompt_no_url: |
   Maintain balance - not too short or too long.
   
   Only write about actual work done, do not write additional suggestions or improvements.
+  
+  ⚠️ Critical Restrictions:
+  - DO NOT create any files (analysis reports, log files, temporary files, etc.)
+  - File saving, file writing, file creation operations are strictly FORBIDDEN
+  - Only provide analysis results as text response
   
   Important: Provide accurate and specific analysis based on provided information and commit messages.
   All analysis content must be written in Korean.
